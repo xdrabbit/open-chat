@@ -14,6 +14,7 @@ from services.ollama_service import OllamaService
 from services.stt_service import STTService
 from services.tts_service import TTSService
 from services.conversation_service import ConversationService
+from services.rag_service import create_rag_service, enhance_chat_with_rag
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,7 @@ ollama_service = OllamaService()
 stt_service = STTService()
 tts_service = TTSService()
 conversation_service = ConversationService()
+rag_service = create_rag_service()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,6 +43,9 @@ async def lifespan(app: FastAPI):
     
     # Initialize conversation storage
     await conversation_service.initialize()
+    
+    # Initialize RAG service
+    await rag_service.initialize()
     
     # Test Ollama connection
     if await ollama_service.health_check():
@@ -133,11 +138,14 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Process chat message and return response"""
     try:
+        # Enhance query with RAG context if available
+        enhanced_query = await enhance_chat_with_rag(request.message, rag_service)
+        
         # Get response from Ollama
         model = request.model or config.OLLAMA_MODEL
-        response_text = await ollama_service.generate_response(request.message, model)
+        response_text = await ollama_service.generate_response(enhanced_query, model)
         
-        # Save user message
+        # Save user message (original, not enhanced)
         user_msg = ChatMessage(
             role="user",
             content=request.message,
@@ -231,6 +239,134 @@ async def get_conversations():
         return {"messages": messages}
     except Exception as e:
         logger.error(f"Error fetching conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/conversations")
+async def clear_conversations():
+    """Clear all conversation history"""
+    try:
+        success = await conversation_service.clear_conversation()
+        if success:
+            return {"message": "Conversation history cleared successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to clear conversation history")
+    except Exception as e:
+        logger.error(f"Error clearing conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/conversations/stats")
+async def get_conversation_stats():
+    """Get conversation statistics"""
+    try:
+        messages = await conversation_service.get_recent_messages(limit=1000)  # Get more for stats
+        total_messages = len(messages)
+        user_messages = len([m for m in messages if m["role"] == "user"])
+        assistant_messages = len([m for m in messages if m["role"] == "assistant"])
+        
+        # Get oldest and newest timestamps
+        if messages:
+            oldest = min(messages, key=lambda x: x["timestamp"])["timestamp"]
+            newest = max(messages, key=lambda x: x["timestamp"])["timestamp"]
+        else:
+            oldest = newest = None
+        
+        return {
+            "total_messages": total_messages,
+            "user_messages": user_messages,
+            "assistant_messages": assistant_messages,
+            "oldest_message": oldest,
+            "newest_message": newest
+        }
+    except Exception as e:
+        logger.error(f"Error getting conversation stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# RAG Endpoints
+@app.post("/rag/upload")
+async def upload_document(file: UploadFile = File(...)):
+    """Upload and process a document for RAG"""
+    temp_file_path = None
+    try:
+        if not rag_service.is_enabled():
+            raise HTTPException(status_code=503, detail="RAG service is not available")
+        
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No filename provided")
+        
+        # Check file format
+        supported_formats = rag_service.get_supported_formats()
+        file_extension = f".{file.filename.split('.')[-1].lower()}"
+        
+        if file_extension not in supported_formats:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file format. Supported: {', '.join(supported_formats)}"
+            )
+        
+        # Save uploaded file temporarily
+        temp_dir = "temp_documents"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file_path = os.path.join(temp_dir, file.filename)
+        
+        with open(temp_file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Process document
+        success = await rag_service.add_document(
+            temp_file_path, 
+            metadata={
+                "filename": file.filename,
+                "content_type": file.content_type,
+                "upload_time": datetime.now().isoformat()
+            }
+        )
+        
+        # Clean up temp file
+        os.remove(temp_file_path)
+        
+        if success:
+            return {"message": f"Document '{file.filename}' processed successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to process document")
+            
+    except Exception as e:
+        logger.error(f"Document upload failed: {e}")
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/rag/stats")
+async def get_rag_stats():
+    """Get RAG system statistics"""
+    try:
+        return rag_service.get_stats()
+    except Exception as e:
+        logger.error(f"Error getting RAG stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rag/search")
+async def search_documents(query: str, max_results: int = 5):
+    """Search documents in RAG system"""
+    try:
+        if not rag_service.is_enabled():
+            raise HTTPException(status_code=503, detail="RAG service is not available")
+        
+        results = await rag_service.search_documents(query, max_results)
+        return {"query": query, "results": results}
+        
+    except Exception as e:
+        logger.error(f"Document search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/rag/documents")
+async def list_rag_documents():
+    """List all documents in RAG system"""
+    try:
+        documents = await rag_service.list_documents()
+        return {"documents": documents}
+    except Exception as e:
+        logger.error(f"Error listing RAG documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

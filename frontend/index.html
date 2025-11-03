@@ -24,12 +24,208 @@
             backdrop-filter: blur(10px);
             padding: 1rem 2rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-left {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
         }
 
         .header h1 {
             color: white;
             font-size: 1.8rem;
             font-weight: 300;
+            margin: 0;
+        }
+
+        .conversation-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .control-button {
+            padding: 0.5rem 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .control-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .control-button.danger:hover {
+            background: rgba(244, 67, 54, 0.3);
+            border-color: rgba(244, 67, 54, 0.7);
+        }
+
+        .stats-info {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 0.25rem;
+        }
+
+        .rag-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .rag-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 0.5rem;
+        }
+
+        .rag-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+
+        .rag-status {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            background: #f1f3f4;
+            color: #666;
+        }
+
+        .rag-status.enabled {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .rag-content {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+            flex: 1;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .file-drop-zone:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .file-drop-zone.drag-over {
+            border-color: #667eea;
+            background: #e3f2fd;
+            border-style: solid;
+        }
+
+        .file-drop-zone .drop-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-drop-zone .drop-text {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-drop-zone .drop-hint {
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        .file-button {
+            padding: 0.5rem 1rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .file-button:hover {
+            background: #5a6fd8;
+        }
+
+        .file-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .upload-progress {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .upload-progress-bar {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .rag-stats {
+            font-size: 0.8rem;
+            color: #666;
+            margin-left: auto;
+        }
+
+        .rag-hidden {
+            display: none;
         }
 
         .status {
@@ -119,10 +315,10 @@
         .audio-controls {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.3rem;
         }
 
-        .play-btn {
+        .play-btn, .stop-btn {
             background: none;
             border: none;
             cursor: pointer;
@@ -132,10 +328,19 @@
             align-items: center;
             justify-content: center;
             transition: background 0.2s;
+            font-size: 0.9rem;
         }
 
-        .play-btn:hover {
+        .play-btn:hover, .stop-btn:hover {
             background: rgba(0, 0, 0, 0.1);
+        }
+
+        .stop-btn {
+            color: #d32f2f;
+        }
+
+        .stop-btn:hover {
+            background: rgba(211, 47, 47, 0.1);
         }
 
         .input-container {
@@ -249,6 +454,7 @@
             align-items: center;
             font-size: 0.9rem;
             color: #666;
+            flex-wrap: wrap;
         }
 
         .settings select {
@@ -256,6 +462,23 @@
             border: 1px solid #ddd;
             border-radius: 5px;
             background: white;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .settings select#voice-select {
+            max-width: 180px;
+        }
+
+        .settings label {
+            white-space: nowrap;
+        }
+
+        .settings-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         @media (max-width: 768px) {
@@ -275,33 +498,88 @@
             .message-content {
                 max-width: 85%;
             }
+            
+            .settings {
+                flex-direction: column;
+                gap: 0.5rem;
+                align-items: stretch;
+            }
+            
+            .settings-group {
+                justify-content: space-between;
+            }
+            
+            .settings select {
+                max-width: none;
+                flex: 1;
+            }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Open Chat</h1>
-        <div class="status">
-            <div class="status-item">
-                <div class="status-dot" id="ollama-status"></div>
-                <span>Ollama</span>
+        <div class="header-left">
+            <h1>Open Chat</h1>
+            <div class="status">
+                <div class="status-item">
+                    <div class="status-dot" id="ollama-status"></div>
+                    <span>Ollama</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot" id="tts-status"></div>
+                    <span id="tts-provider">TTS</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot" id="stt-status"></div>
+                    <span>Speech Recognition</span>
+                </div>
             </div>
-            <div class="status-item">
-                <div class="status-dot" id="tts-status"></div>
-                <span id="tts-provider">TTS</span>
+            <div class="stats-info" id="conversation-stats">
+                Loading conversation stats...
             </div>
-            <div class="status-item">
-                <div class="status-dot" id="stt-status"></div>
-                <span>Speech Recognition</span>
+        </div>
+        
+        <div class="header-right">
+            <div class="conversation-controls">
+                <button class="control-button" id="load-history-btn" title="Reload conversation history">
+                    🔄 Reload History
+                </button>
+                <button class="control-button danger" id="clear-history-btn" title="Clear all conversation history">
+                    🗑️ Clear History
+                </button>
             </div>
         </div>
     </div>
 
     <div class="chat-container">
+        <!-- RAG Section -->
+        <div class="rag-section" id="rag-section">
+            <div class="rag-header">
+                <h3 class="rag-title">📚 Knowledge Base (RAG)</h3>
+                <span class="rag-status" id="rag-status">Checking...</span>
+            </div>
+            <div class="rag-content">
+                <div class="file-upload">
+                    <input type="file" id="file-input" class="file-input" accept=".txt,.md,.pdf,.docx" multiple>
+                    <div class="file-drop-zone" id="file-drop-zone">
+                        <div class="drop-icon">📁</div>
+                        <div class="drop-text">Drag & drop documents here</div>
+                        <div class="drop-hint">or click to browse (.txt, .md, .pdf, .docx)</div>
+                        <div class="upload-progress" id="upload-progress">
+                            <div class="upload-progress-bar" id="upload-progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="rag-stats" id="rag-stats">
+                    No documents uploaded yet
+                </div>
+            </div>
+        </div>
+
         <div class="messages-container" id="messages">
             <div class="message assistant">
                 <div class="message-content">
-                    <div>👋 Hello! I'm your local AI assistant. You can type or speak to me, and I'll respond with both text and voice. How can I help you today?</div>
+                    <div>👋 Hello! I'm your local AI assistant. You can type or speak to me, and I'll respond with both text and voice. Upload documents to enhance my knowledge! How can I help you today?</div>
                 </div>
             </div>
         </div>
@@ -324,37 +602,43 @@
             </div>
             
             <div class="settings">
-                <label>Model:</label>
-                <select id="model-select">
-                    <option value="llama3.2">llama3.2</option>
-                    <option value="llama3">llama3</option>
-                    <option value="mistral">mistral</option>
-                    <option value="codellama">codellama</option>
-                </select>
+                <div class="settings-group">
+                    <label>Model:</label>
+                    <select id="model-select">
+                        <option value="llama3.2">llama3.2</option>
+                        <option value="llama3">llama3</option>
+                        <option value="mistral">mistral</option>
+                        <option value="codellama">codellama</option>
+                    </select>
+                </div>
                 
-                <label>TTS:</label>
-                <select id="tts-select">
-                    <option value="elevenlabs">ElevenLabs</option>
-                    <option value="pyttsx3">Local (pyttsx3)</option>
-                </select>
+                <div class="settings-group">
+                    <label>TTS:</label>
+                    <select id="tts-select">
+                        <option value="elevenlabs">ElevenLabs</option>
+                        <option value="pyttsx3">Local (pyttsx3)</option>
+                    </select>
+                </div>
                 
-                <label>Voice:</label>
-                <select id="voice-select">
-                    <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Default)</option>
-                    <option value="AZnzlk1XvdvUeBnXmlld">Domi</option>
-                    <option value="EXAVITQu4vr4xnSDxMaL">Bella</option>
-                    <option value="ErXwobaYiN019PkySvjV">Antoni</option>
-                    <option value="MF3mGyEYCl7XYWbV9V6O">Elli</option>
-                    <option value="TxGEqnHWrfWFTfGW9XjX">Josh</option>
-                    <option value="VR6AewLTigWG4xSOukaG">Arnold</option>
-                    <option value="pNInz6obpgDQGcFmaJgB">Adam</option>
-                    <option value="yoZ06aMxZJJ28mfd3POQ">Sam</option>
-                    <option value="29vD33N1CtxCmqQRPOHJ">Drew</option>
-                    <option value="IKne3meq5aSn9XLyUdCD">Paul</option>
-                    <option value="JBFqnCBsd6RMkjVDRZzb">George</option>
-                    <option value="N2lVS1w4EtoT3dr4eOWO">Callum</option>
-                    <option value="onwK4e9ZLuTAKqWW03F9">Daniel</option>
-                </select>
+                <div class="settings-group">
+                    <label>Voice:</label>
+                    <select id="voice-select">
+                        <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Default)</option>
+                        <option value="AZnzlk1XvdvUeBnXmlld">Domi</option>
+                        <option value="EXAVITQu4vr4xnSDxMaL">Bella</option>
+                        <option value="ErXwobaYiN019PkySvjV">Antoni</option>
+                        <option value="MF3mGyEYCl7XYWbV9V6O">Elli</option>
+                        <option value="TxGEqnHWrfWFTfGW9XjX">Josh</option>
+                        <option value="VR6AewLTigWG4xSOukaG">Arnold</option>
+                        <option value="pNInz6obpgDQGcFmaJgB">Adam</option>
+                        <option value="yoZ06aMxZJJ28mfd3POQ">Sam</option>
+                        <option value="29vD33N1CtxCmqQRPOHJ">Drew</option>
+                        <option value="IKne3meq5aSn9XLyUdCD">Paul</option>
+                        <option value="JBFqnCBsd6RMkjVDRZzb">George</option>
+                        <option value="N2lVS1w4EtoT3dr4eOWO">Callum</option>
+                        <option value="onwK4e9ZLuTAKqWW03F9">Daniel</option>
+                    </select>
+                </div>
             </div>
         </div>
     </div>

@@ -6,15 +6,21 @@ class OpenChat {
         this.audioChunks = [];
         this.isLoading = false;
         
+        // Audio playback management
+        this.currentAudio = null;
+        this.currentPlayButton = null;
+        
         this.initializeElements();
         this.bindEvents();
         this.checkHealth();
         this.loadVoices();
         this.loadModels();
         this.loadConversationHistory();
+        this.loadConversationStats();
     }
 
     initializeElements() {
+        // UI elements
         this.messagesContainer = document.getElementById('messages');
         this.messageInput = document.getElementById('message-input');
         this.sendBtn = document.getElementById('send-btn');
@@ -28,6 +34,20 @@ class OpenChat {
         this.ttsStatus = document.getElementById('tts-status');
         this.sttStatus = document.getElementById('stt-status');
         this.ttsProvider = document.getElementById('tts-provider');
+        
+        // Conversation controls
+        this.loadHistoryBtn = document.getElementById('load-history-btn');
+        this.clearHistoryBtn = document.getElementById('clear-history-btn');
+        this.conversationStats = document.getElementById('conversation-stats');
+        
+        // RAG controls
+        this.ragSection = document.getElementById('rag-section');
+        this.ragStatus = document.getElementById('rag-status');
+        this.ragStats = document.getElementById('rag-stats');
+        this.fileInput = document.getElementById('file-input');
+        this.fileDropZone = document.getElementById('file-drop-zone');
+        this.uploadProgress = document.getElementById('upload-progress');
+        this.uploadProgressBar = document.getElementById('upload-progress-bar');
     }
 
     bindEvents() {
@@ -45,10 +65,52 @@ class OpenChat {
             this.sendBtn.disabled = !this.messageInput.value.trim() || this.isLoading;
         });
 
+        // Conversation controls
+        this.loadHistoryBtn.addEventListener('click', () => this.reloadConversationHistory());
+        this.clearHistoryBtn.addEventListener('click', () => this.clearConversationHistory());
+
+        // RAG controls
+        this.fileInput.addEventListener('change', () => this.handleFileUpload());
+        this.setupDragAndDrop();
+
         // Auto-scroll messages
         this.messagesContainer.addEventListener('DOMNodeInserted', () => {
             this.scrollToBottom();
         });
+    }
+
+    setupDragAndDrop() {
+        // Click to browse
+        this.fileDropZone.addEventListener('click', () => {
+            this.fileInput.click();
+        });
+
+        // Drag and drop events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            this.fileDropZone.addEventListener(eventName, this.preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            this.fileDropZone.addEventListener(eventName, () => {
+                this.fileDropZone.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            this.fileDropZone.addEventListener(eventName, () => {
+                this.fileDropZone.classList.remove('drag-over');
+            }, false);
+        });
+
+        this.fileDropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            this.handleFileUpload(files);
+        }, false);
+    }
+
+    preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
     }
 
     async checkHealth() {
@@ -227,38 +289,81 @@ class OpenChat {
 
     async startRecording() {
         try {
+            // Check if getUserMedia is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('getUserMedia is not supported in this browser');
+            }
+
+            console.log('Requesting microphone access...');
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
+                    autoGainControl: true,
                     sampleRate: 44100
                 } 
             });
             
+            console.log('Microphone access granted, stream tracks:', stream.getTracks().length);
+            
             this.audioChunks = [];
-            this.mediaRecorder = new MediaRecorder(stream, {
-                mimeType: 'audio/webm'
-            });
+            
+            // Check supported MIME types and use the best available
+            let mimeType = 'audio/webm';
+            if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    mimeType = 'audio/mp4';
+                } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+                    mimeType = 'audio/wav';
+                } else {
+                    console.warn('No preferred audio format supported, using default');
+                    mimeType = '';
+                }
+            }
+            
+            console.log('Using MIME type:', mimeType);
+            
+            this.mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
             
             this.mediaRecorder.ondataavailable = (event) => {
+                console.log('Audio data chunk received:', event.data.size, 'bytes');
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data);
                 }
             };
             
             this.mediaRecorder.onstop = () => {
+                console.log('Recording stopped, processing...');
                 this.processRecording();
                 stream.getTracks().forEach(track => track.stop());
             };
             
-            this.mediaRecorder.start();
+            this.mediaRecorder.onerror = (event) => {
+                console.error('MediaRecorder error:', event.error);
+            };
+            
+            this.mediaRecorder.start(1000); // Collect data every second
             this.isRecording = true;
             this.micBtn.classList.add('recording');
             this.micBtn.title = 'Click to stop recording';
             
+            console.log('Recording started successfully');
+            
         } catch (error) {
             console.error('Failed to start recording:', error);
-            alert('Microphone access denied or not available. Please check your browser settings.');
+            let errorMessage = 'Microphone access failed. ';
+            
+            if (error.name === 'NotAllowedError') {
+                errorMessage += 'Please allow microphone access and try again.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += 'No microphone found. Please connect a microphone.';
+            } else if (error.name === 'NotSupportedError') {
+                errorMessage += 'Microphone not supported in this browser.';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            alert(errorMessage);
         }
     }
 
@@ -272,31 +377,46 @@ class OpenChat {
     }
 
     async processRecording() {
-        if (this.audioChunks.length === 0) return;
+        if (this.audioChunks.length === 0) {
+            console.warn('No audio chunks to process');
+            return;
+        }
 
+        console.log('Processing', this.audioChunks.length, 'audio chunks');
         this.setLoading(true);
         
         try {
             const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+            console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
+            
+            if (audioBlob.size === 0) {
+                throw new Error('Audio recording is empty');
+            }
+            
             const formData = new FormData();
             formData.append('audio', audioBlob, 'recording.webm');
 
+            console.log('Sending audio to server for transcription...');
             const response = await fetch(`${this.apiBase}/transcribe`, {
                 method: 'POST',
                 body: formData
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
             const data = await response.json();
+            console.log('Transcription response:', data);
             
-            if (data.text.trim()) {
+            if (data.text && data.text.trim()) {
+                console.log('Transcribed text:', data.text);
                 this.messageInput.value = data.text;
                 this.sendMessage();
             } else {
-                alert('No speech detected. Please try again.');
+                console.warn('No speech detected in transcription');
+                alert('No speech detected. Please try speaking more clearly or check your microphone.');
             }
 
         } catch (error) {
@@ -338,9 +458,18 @@ class OpenChat {
                 playBtn.className = 'play-btn';
                 playBtn.innerHTML = '🔊';
                 playBtn.title = 'Play audio';
-                playBtn.onclick = () => this.playAudio(audioFile);
+                playBtn.dataset.audioFile = audioFile;
+                playBtn.onclick = (e) => this.toggleAudio(audioFile, e.target);
+                
+                const stopBtn = document.createElement('button');
+                stopBtn.className = 'stop-btn';
+                stopBtn.innerHTML = '⏹️';
+                stopBtn.title = 'Stop audio';
+                stopBtn.style.display = 'none';
+                stopBtn.onclick = () => this.stopAudio();
                 
                 audioControls.appendChild(playBtn);
+                audioControls.appendChild(stopBtn);
                 metaDiv.appendChild(audioControls);
             }
             
@@ -352,13 +481,87 @@ class OpenChat {
         this.scrollToBottom();
     }
 
-    async playAudio(audioFile) {
+    async toggleAudio(audioFile, buttonElement) {
         try {
-            const audio = new Audio(`${this.apiBase}/audio/${audioFile}`);
-            audio.play();
+            // If audio is currently playing, stop it
+            if (this.currentAudio && !this.currentAudio.paused) {
+                this.stopAudio();
+                
+                // If clicking the same button, just stop
+                if (this.currentPlayButton === buttonElement) {
+                    return;
+                }
+            }
+            
+            // Play new audio
+            await this.playAudio(audioFile, buttonElement);
+            
+        } catch (error) {
+            console.error('Audio toggle error:', error);
+        }
+    }
+
+    async playAudio(audioFile, buttonElement = null) {
+        try {
+            // Stop any currently playing audio
+            this.stopAudio();
+            
+            console.log('Playing audio:', audioFile);
+            this.currentAudio = new Audio(`${this.apiBase}/audio/${audioFile}`);
+            this.currentPlayButton = buttonElement;
+            
+            // Update button state
+            if (buttonElement) {
+                buttonElement.innerHTML = '⏸️';
+                buttonElement.title = 'Pause audio';
+                
+                // Show stop button
+                const stopBtn = buttonElement.parentElement.querySelector('.stop-btn');
+                if (stopBtn) {
+                    stopBtn.style.display = 'inline-block';
+                }
+            }
+            
+            // Set up event listeners
+            this.currentAudio.onended = () => {
+                this.resetAudioControls();
+            };
+            
+            this.currentAudio.onerror = (e) => {
+                console.error('Audio playback error:', e);
+                this.resetAudioControls();
+            };
+            
+            // Play the audio
+            await this.currentAudio.play();
+            
         } catch (error) {
             console.error('Audio playback error:', error);
+            this.resetAudioControls();
         }
+    }
+
+    stopAudio() {
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio.currentTime = 0;
+            this.currentAudio = null;
+        }
+        this.resetAudioControls();
+    }
+
+    resetAudioControls() {
+        if (this.currentPlayButton) {
+            this.currentPlayButton.innerHTML = '🔊';
+            this.currentPlayButton.title = 'Play audio';
+            
+            // Hide stop button
+            const stopBtn = this.currentPlayButton.parentElement.querySelector('.stop-btn');
+            if (stopBtn) {
+                stopBtn.style.display = 'none';
+            }
+        }
+        this.currentPlayButton = null;
     }
 
     setLoading(loading) {
@@ -393,6 +596,211 @@ class OpenChat {
 
     scrollToBottom() {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+    }
+
+    async loadConversationStats() {
+        try {
+            const response = await fetch(`${this.apiBase}/conversations/stats`);
+            const stats = await response.json();
+            
+            let statsText = `Messages: ${stats.total_messages} (${stats.user_messages} user, ${stats.assistant_messages} assistant)`;
+            if (stats.oldest_message) {
+                const oldestDate = new Date(stats.oldest_message);
+                statsText += ` • Since: ${oldestDate.toLocaleDateString()}`;
+            }
+            
+            this.conversationStats.textContent = statsText;
+            
+        } catch (error) {
+            console.error('Failed to load conversation stats:', error);
+            this.conversationStats.textContent = 'Stats unavailable';
+        }
+    }
+
+    async reloadConversationHistory() {
+        this.loadHistoryBtn.disabled = true;
+        this.loadHistoryBtn.textContent = '🔄 Loading...';
+        
+        try {
+            await this.loadConversationHistory();
+            await this.loadConversationStats();
+            
+            // Show success feedback
+            this.loadHistoryBtn.textContent = '✅ Reloaded';
+            setTimeout(() => {
+                this.loadHistoryBtn.textContent = '🔄 Reload History';
+                this.loadHistoryBtn.disabled = false;
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Failed to reload conversation history:', error);
+            alert('Failed to reload conversation history');
+            this.loadHistoryBtn.textContent = '🔄 Reload History';
+            this.loadHistoryBtn.disabled = false;
+        }
+    }
+
+    async clearConversationHistory() {
+        const confirmed = confirm(
+            'Are you sure you want to clear all conversation history? This cannot be undone.'
+        );
+        
+        if (!confirmed) return;
+        
+        this.clearHistoryBtn.disabled = true;
+        this.clearHistoryBtn.textContent = '🗑️ Clearing...';
+        
+        try {
+            const response = await fetch(`${this.apiBase}/conversations`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            // Clear the messages container except welcome message
+            const welcomeMessage = this.messagesContainer.querySelector('.message.assistant');
+            this.messagesContainer.innerHTML = '';
+            if (welcomeMessage) {
+                this.messagesContainer.appendChild(welcomeMessage);
+            }
+            
+            // Update stats
+            await this.loadConversationStats();
+            
+            // Show success feedback
+            this.clearHistoryBtn.textContent = '✅ Cleared';
+            setTimeout(() => {
+                this.clearHistoryBtn.textContent = '🗑️ Clear History';
+                this.clearHistoryBtn.disabled = false;
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Failed to clear conversation history:', error);
+            alert('Failed to clear conversation history');
+            this.clearHistoryBtn.textContent = '🗑️ Clear History';
+            this.clearHistoryBtn.disabled = false;
+        }
+    }
+
+    async checkRAGStatus() {
+        try {
+            const response = await fetch(`${this.apiBase}/rag/stats`);
+            const stats = await response.json();
+            
+            if (stats.enabled) {
+                this.ragStatus.textContent = 'Enabled';
+                this.ragStatus.classList.add('enabled');
+                this.updateRAGStats(stats);
+            } else {
+                this.ragStatus.textContent = 'Disabled';
+                this.ragStats.textContent = 'RAG service not available';
+            }
+            
+        } catch (error) {
+            console.error('Failed to check RAG status:', error);
+            this.ragStatus.textContent = 'Error';
+            this.ragStats.textContent = 'Unable to connect to RAG service';
+        }
+    }
+
+    updateRAGStats(stats) {
+        const documents = stats.unique_documents || 0;
+        const chunks = stats.total_chunks || 0;
+        const coverage = Math.round((stats.embedding_coverage || 0) * 100);
+        
+        this.ragStats.textContent = `${documents} documents, ${chunks} chunks, ${coverage}% embedded`;
+    }
+
+    async handleFileUpload(droppedFiles = null) {
+        const files = droppedFiles || this.fileInput.files;
+        if (!files || files.length === 0) return;
+        
+        // Update UI
+        this.showUploadProgress();
+        
+        try {
+            // Upload files one by one
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                console.log(`Uploading file ${i + 1}/${files.length}:`, file.name);
+                
+                // Update progress
+                const progress = ((i / files.length) * 100);
+                this.updateUploadProgress(progress, `Uploading ${file.name}...`);
+                
+                await this.uploadSingleFile(file);
+            }
+            
+            // Complete
+            this.updateUploadProgress(100, 'Upload complete!');
+            
+            // Update stats
+            await this.checkRAGStatus();
+            
+            // Reset file input
+            this.fileInput.value = '';
+            
+            // Hide progress after a moment
+            setTimeout(() => {
+                this.hideUploadProgress();
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.updateUploadProgress(0, `Upload failed: ${error.message}`);
+            
+            setTimeout(() => {
+                this.hideUploadProgress();
+            }, 3000);
+        }
+    }
+
+    async uploadSingleFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch(`${this.apiBase}/rag/upload`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Upload failed');
+        }
+        
+        const result = await response.json();
+        
+        // Add system message about upload
+        this.addMessage(
+            `📚 Document "${file.name}" has been added to my knowledge base. I can now answer questions based on its content!`,
+            'assistant',
+            null,
+            new Date()
+        );
+        
+        return result;
+    }
+
+    showUploadProgress() {
+        this.uploadProgress.style.display = 'block';
+        this.fileDropZone.querySelector('.drop-text').textContent = 'Uploading...';
+    }
+
+    updateUploadProgress(percent, message = '') {
+        this.uploadProgressBar.style.width = `${percent}%`;
+        if (message) {
+            this.fileDropZone.querySelector('.drop-hint').textContent = message;
+        }
+    }
+
+    hideUploadProgress() {
+        this.uploadProgress.style.display = 'none';
+        this.uploadProgressBar.style.width = '0%';
+        this.fileDropZone.querySelector('.drop-text').textContent = 'Drag & drop documents here';
+        this.fileDropZone.querySelector('.drop-hint').textContent = 'or click to browse (.txt, .md, .pdf, .docx)';
     }
 }
 

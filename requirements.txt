@@ -11,3 +11,8 @@ pyttsx3>=2.90
 pydub>=0.25.1
 aiosqlite>=0.19.0
 aiofiles>=0.20.0
+
+# RAG dependencies (optional)
+sentence-transformers>=2.0.0
+PyPDF2>=3.0.0
+numpy>=1.21.0
