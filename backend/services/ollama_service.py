@@ -1,7 +1,7 @@
 import httpx
 import json
 import logging
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Dict, Any, List
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -12,13 +12,13 @@ class OllamaService:
     def __init__(self):
         self.base_url = config.OLLAMA_HOST
         self.default_model = config.OLLAMA_MODEL
+        self.client = httpx.AsyncClient(timeout=300.0)
         
     async def health_check(self) -> bool:
         """Check if Ollama is running and accessible"""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{self.base_url}/api/tags", timeout=5.0)
-                return response.status_code == 200
+            response = await self.client.get(f"{self.base_url}/api/tags", timeout=5.0)
+            return response.status_code == 200
         except Exception as e:
             logger.error(f"Ollama health check failed: {e}")
             return False
@@ -26,41 +26,257 @@ class OllamaService:
     async def get_available_models(self) -> list:
         """Get list of available models from Ollama"""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{self.base_url}/api/tags")
-                if response.status_code == 200:
-                    data = response.json()
-                    return [model["name"] for model in data.get("models", [])]
-                return []
+            response = await self.client.get(f"{self.base_url}/api/tags")
+            if response.status_code == 200:
+                data = response.json()
+                return [model["name"] for model in data.get("models", [])]
+            return []
         except Exception as e:
             logger.error(f"Failed to get models: {e}")
             return []
+
+    def get_available_functions(self) -> List[Dict[str, Any]]:
+        """Define functions that AI can call"""
+        return [
+            {
+                "name": "generate_image",
+                "description": "Generate an image to illustrate, enhance, or visualize concepts in the conversation. Use this when the user asks for visual content, when explaining complex ideas that would benefit from illustration, or when you think an image would significantly improve your response.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {
+                            "type": "string",
+                            "description": "Detailed, descriptive prompt for image generation. Be specific about style, composition, lighting, and mood."
+                        },
+                        "reason": {
+                            "type": "string", 
+                            "description": "Brief explanation of why this image would enhance the conversation or response."
+                        },
+                        "style": {
+                            "type": "string",
+                            "description": "Art style preference: realistic, artistic, cartoon, sketch, digital art, photographic, etc.",
+                            "enum": ["realistic", "artistic", "cartoon", "sketch", "digital_art", "photographic", "concept_art"]
+                        }
+                    },
+                    "required": ["prompt", "reason"]
+                }
+            }
+        ]
+
+    async def chat_with_functions(
+        self, 
+        message: str, 
+        model: str, 
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+        context: Optional[List[Dict]] = None,
+        _is_internal_call: bool = False
+    ) -> Dict[str, Any]:
+        """Enhanced chat with function calling capability"""
+        try:
+            # Check if this is a visual request that should trigger image generation
+            visual_keywords = [
+                "show me", "draw", "create an image", "generate", "visualize", "illustrate", 
+                "what does", "what would", "picture of", "image of", "looks like", "appears"
+            ]
+            
+            message_lower = message.lower()
+            is_visual_request = any(keyword in message_lower for keyword in visual_keywords)
+            
+            if is_visual_request and not _is_internal_call:
+                # Force image generation for visual requests
+                logger.info(f"Detected visual request: {message}")
+                
+                # Get a regular chat response first (avoid recursion by calling base chat directly)
+                regular_response = await self._chat_without_functions(message, model, context, temperature, top_p)
+                
+                # Create an image prompt based on the request
+                image_prompt = self._create_image_prompt_from_request(message)
+                
+                return {
+                    "response": regular_response,
+                    "function_call": {
+                        "name": "generate_image",
+                        "arguments": {
+                            "prompt": image_prompt,
+                            "reason": "Visual illustration requested by user",
+                            "style": "artistic"
+                        }
+                    },
+                    "ai_initiated": True
+                }
+            
+            # Build conversation context
+            messages = []
+            if context:
+                messages.extend(context)
+            
+            # Add system message with function calling instructions
+            system_message = {
+                "role": "system",
+                "content": """You are a creative AI assistant with the ability to generate images to enhance your responses. 
+
+Consider generating images when:
+- User asks to "show", "draw", "illustrate", "visualize", or "create" something visual
+- Explaining complex concepts that would benefit from diagrams or illustrations
+- Creative requests that need visual inspiration or examples
+- User asks "what would X look like?" or similar visual questions
+- You think an image would significantly improve understanding or engagement
+
+When you decide to generate an image, use the generate_image function with a detailed, creative prompt. Always explain your reasoning and how the image relates to your response.
+
+Be creative and helpful, but only generate images when they truly add value to the conversation."""
+            }
+            messages.append(system_message)
+            
+            # Add user message
+            messages.append({
+                "role": "user",
+                "content": message
+            })
+            
+            # First, get AI response with function calling capability
+            function_prompt = f"""
+{message}
+
+You have access to image generation capabilities. If this request would benefit from a visual illustration, you can generate an image by responding in this exact format:
+
+FUNCTION_CALL: generate_image
+ARGUMENTS: {{"prompt": "detailed description of image to generate", "reason": "why this image helps", "style": "artistic"}}
+
+Then continue with your normal text response after the function call.
+
+Only use the function call if the user's request would genuinely benefit from visual content. If it's just a regular question, respond normally without any function call.
+"""
+
+            payload = {
+                "model": model,
+                "messages": messages[:-1] + [{"role": "user", "content": function_prompt}],
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "top_p": top_p
+                }
+            }
+            
+            response = await self.client.post(f"{self.base_url}/api/chat", json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_response = data["message"]["content"]
+                
+                # Debug: Log the AI response to see what it's generating
+                logger.info(f"AI Response: {ai_response[:200]}...")
+                
+                # Check if AI wants to call a function
+                if "FUNCTION_CALL:" in ai_response and "generate_image" in ai_response:
+                    try:
+                        # Extract function call - look for the pattern more carefully
+                        lines = ai_response.split('\n')
+                        function_args = None
+                        text_response_lines = []
+                        
+                        collecting_response = False
+                        
+                        for i, line in enumerate(lines):
+                            line = line.strip()
+                            if "FUNCTION_CALL:" in line and "generate_image" in line:
+                                # Look for arguments on next line or same line
+                                if i + 1 < len(lines) and "ARGUMENTS:" in lines[i + 1]:
+                                    args_line = lines[i + 1].strip()
+                                    args_json = args_line.replace("ARGUMENTS:", "").strip()
+                                    try:
+                                        function_args = json.loads(args_json)
+                                        collecting_response = True
+                                        continue
+                                    except json.JSONDecodeError:
+                                        pass
+                                elif "ARGUMENTS:" in line:
+                                    # Arguments on same line
+                                    parts = line.split("ARGUMENTS:", 1)
+                                    if len(parts) > 1:
+                                        args_json = parts[1].strip()
+                                        try:
+                                            function_args = json.loads(args_json)
+                                            collecting_response = True
+                                            continue
+                                        except json.JSONDecodeError:
+                                            pass
+                            elif collecting_response and line and not line.startswith("FUNCTION_CALL") and not line.startswith("ARGUMENTS"):
+                                text_response_lines.append(line)
+                            elif not collecting_response and not "FUNCTION_CALL" in line and not "ARGUMENTS" in line:
+                                text_response_lines.append(line)
+                        
+                        if function_args:
+                            # Ensure required fields are present
+                            if "prompt" not in function_args:
+                                function_args["prompt"] = "A beautiful, detailed illustration"
+                            if "reason" not in function_args:
+                                function_args["reason"] = "Visual enhancement for the conversation"
+                            if "style" not in function_args:
+                                function_args["style"] = "artistic"
+                            
+                            return {
+                                "response": '\n'.join(text_response_lines).strip() if text_response_lines else "I'll create an image for you!",
+                                "function_call": {
+                                    "name": "generate_image",
+                                    "arguments": function_args
+                                },
+                                "ai_initiated": True
+                            }
+                    except Exception as e:
+                        logger.error(f"Error parsing function call: {e}")
+                        # Fall back to normal response
+                        pass
+                
+                return {
+                    "response": ai_response,
+                    "ai_initiated": False
+                }
+            else:
+                logger.error(f"Ollama chat error: {response.status_code} - {response.text}")
+                return {"response": "Sorry, I encountered an error while processing your request.", "ai_initiated": False}
+                
+        except Exception as e:
+            logger.error(f"Chat with functions error: {e}")
+            return {"response": "Sorry, I encountered an error while processing your request.", "ai_initiated": False}
+
+    async def chat(
+        self, 
+        message: str, 
+        model: str, 
+        context: Optional[List[Dict]] = None,
+        temperature: float = 0.7,
+        top_p: float = 0.9
+    ) -> str:
+        """Standard chat interface that maintains backward compatibility"""
+        result = await self.chat_with_functions(message, model, temperature, top_p, context, _is_internal_call=True)
+        return result.get("response", "Sorry, I encountered an error.")
     
     async def generate_response(self, prompt: str, model: Optional[str] = None) -> str:
-        """Generate response from Ollama model"""
+        """Generate response from Ollama model (legacy method)"""
         model = model or self.default_model
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                payload = {
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False
-                }
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "stream": False
+            }
+            
+            response = await self.client.post(
+                f"{self.base_url}/api/generate",
+                json=payload
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("response", "")
+            else:
+                error_msg = f"Ollama API error: {response.status_code} - {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
                 
-                response = await client.post(
-                    f"{self.base_url}/api/generate",
-                    json=payload
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("response", "")
-                else:
-                    error_msg = f"Ollama API error: {response.status_code} - {response.text}"
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
-                    
         except httpx.TimeoutException:
             error_msg = "Request to Ollama timed out"
             logger.error(error_msg)
@@ -74,34 +290,33 @@ class OllamaService:
         model = model or self.default_model
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                payload = {
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": True
-                }
-                
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/api/generate",
-                    json=payload
-                ) as response:
-                    if response.status_code == 200:
-                        async for line in response.aiter_lines():
-                            if line.strip():
-                                try:
-                                    data = json.loads(line)
-                                    if "response" in data:
-                                        yield data["response"]
-                                    if data.get("done", False):
-                                        break
-                                except json.JSONDecodeError:
-                                    continue
-                    else:
-                        error_msg = f"Ollama API error: {response.status_code}"
-                        logger.error(error_msg)
-                        raise Exception(error_msg)
-                        
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "stream": True
+            }
+            
+            async with self.client.stream(
+                "POST",
+                f"{self.base_url}/api/generate",
+                json=payload
+            ) as response:
+                if response.status_code == 200:
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            try:
+                                data = json.loads(line)
+                                if "response" in data:
+                                    yield data["response"]
+                                if data.get("done", False):
+                                    break
+                            except json.JSONDecodeError:
+                                continue
+                else:
+                    error_msg = f"Ollama API error: {response.status_code}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
+                    
         except Exception as e:
             logger.error(f"Ollama streaming error: {e}")
             raise
@@ -109,16 +324,79 @@ class OllamaService:
     async def pull_model(self, model_name: str) -> bool:
         """Pull a model from Ollama registry"""
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                payload = {"name": model_name}
-                
-                response = await client.post(
-                    f"{self.base_url}/api/pull",
-                    json=payload
-                )
-                
-                return response.status_code == 200
-                
+            payload = {"name": model_name}
+            
+            response = await self.client.post(
+                f"{self.base_url}/api/pull",
+                json=payload
+            )
+            
+            return response.status_code == 200
+            
         except Exception as e:
             logger.error(f"Failed to pull model {model_name}: {e}")
             return False
+
+    def _create_image_prompt_from_request(self, message: str) -> str:
+        """Create a detailed image prompt from user request"""
+        message_lower = message.lower()
+        
+        # Extract key visual elements from the request
+        if "garden" in message_lower:
+            return "A beautiful, serene garden with colorful flowers, lush greenery, winding paths, and peaceful atmosphere, detailed artistic illustration"
+        elif "city" in message_lower and ("futuristic" in message_lower or "future" in message_lower):
+            return "A stunning futuristic cityscape with gleaming skyscrapers, flying vehicles, advanced architecture, and vibrant lighting, digital art style"
+        elif "horse" in message_lower:
+            return "A majestic white horse galloping freely in a green meadow with dramatic clouds overhead, artistic painting style"
+        elif "chariot" in message_lower:
+            return "An ornate golden chariot with intricate details, pulled by powerful horses, set against a dramatic sky with clouds, classical art style"
+        elif "music" in message_lower:
+            return "An artistic visualization of music with flowing sound waves, musical notes floating in air, vibrant colors representing harmony and rhythm, abstract art style"
+        else:
+            # Generic fallback based on keywords
+            return f"A detailed artistic illustration based on: {message}, beautiful composition, vibrant colors, professional art style"
+    
+    async def _chat_without_functions(
+        self, 
+        message: str, 
+        model: str, 
+        context: Optional[List[Dict]] = None,
+        temperature: float = 0.7,
+        top_p: float = 0.9
+    ) -> str:
+        """Internal chat method without function calling to avoid recursion"""
+        # Build conversation context
+        messages = []
+        if context:
+            messages.extend(context)
+        
+        messages.append({"role": "user", "content": message})
+        
+        try:
+            # Create the payload for chat completion
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "top_p": top_p
+                }
+            }
+            
+            # Call Ollama API directly
+            response = await self.client.post(
+                f"{self.base_url}/api/chat",
+                json=payload
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("message", {}).get("content", "")
+            else:
+                logger.error(f"Ollama API error: {response.status_code}")
+                return "Sorry, I encountered an error while processing your request."
+                
+        except Exception as e:
+            logger.error(f"Ollama API error in _chat_without_functions: {e}")
+            return "Sorry, I encountered an error while processing your request."

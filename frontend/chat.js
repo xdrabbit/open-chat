@@ -52,6 +52,15 @@ class OpenChat {
         this.clearHistoryBtn = document.getElementById('clear-history-btn');
         this.conversationStats = document.getElementById('conversation-stats');
         
+        // Creativity controls
+        this.creativityToggleBtn = document.getElementById('creativity-toggle-btn');
+        this.creativityPanel = document.getElementById('creativity-panel');
+        this.resetCreativityBtn = document.getElementById('reset-creativity-btn');
+        this.temperatureSlider = document.getElementById('temperature-slider');
+        this.temperatureValue = document.getElementById('temperature-value');
+        this.topPSlider = document.getElementById('top_p-slider');
+        this.topPValue = document.getElementById('top_p-value');
+        
         // RAG controls
         this.ragSection = document.getElementById('rag-section');
         this.ragStatus = document.getElementById('rag-status');
@@ -98,6 +107,12 @@ class OpenChat {
         // Conversation controls
         this.loadHistoryBtn.addEventListener('click', () => this.reloadConversationHistory());
         this.clearHistoryBtn.addEventListener('click', () => this.clearConversationHistory());
+
+        // Creativity controls
+        this.creativityToggleBtn.addEventListener('click', () => this.toggleCreativityPanel());
+        this.resetCreativityBtn.addEventListener('click', () => this.resetCreativityControls());
+        this.temperatureSlider.addEventListener('input', () => this.updateTemperatureValue());
+        this.topPSlider.addEventListener('input', () => this.updateTopPValue());
 
         // Image upload controls
         this.imageBtn.addEventListener('click', () => this.imageInput.click());
@@ -310,7 +325,8 @@ class OpenChat {
                     body: formData
                 });
             } else {
-                // Use regular text endpoint
+                // Use regular text endpoint with creativity controls
+                const creativitySettings = this.getCreativitySettings();
                 response = await fetch(`${this.apiBase}/chat`, {
                     method: 'POST',
                     headers: {
@@ -319,7 +335,9 @@ class OpenChat {
                     body: JSON.stringify({
                         message: message,
                         model: this.modelSelect.value,
-                        voice_id: this.voiceSelect.value
+                        voice_id: this.voiceSelect.value,
+                        temperature: creativitySettings.temperature,
+                        top_p: creativitySettings.top_p
                     })
                 });
             }
@@ -332,6 +350,11 @@ class OpenChat {
             
             // Add assistant response to UI
             this.addMessage(data.response, 'assistant', data.audio_file, new Date(data.timestamp));
+            
+            // Handle AI-generated image if present
+            if (data.generated_image) {
+                this.displayAIGeneratedImage(data.generated_image);
+            }
             
             // Auto-play audio if available
             if (data.audio_file) {
@@ -1102,9 +1125,89 @@ class OpenChat {
         link.click();
         document.body.removeChild(link);
     }
+
+    displayAIGeneratedImage(generatedImage) {
+        // Create a special message div for AI-generated images
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant ai-generated';
+        
+        const timestamp = new Date().toLocaleTimeString();
+        const imageUrl = this.apiBase + generatedImage.url;
+        
+        messageDiv.innerHTML = `
+            <div class="message-header">
+                <span class="message-role">🤖 AI Generated Image</span>
+                <span class="message-time">${timestamp}</span>
+            </div>
+            <div class="message-content">
+                <div class="ai-image-info">
+                    <div class="ai-image-reason">
+                        <strong>Reason:</strong> ${generatedImage.reason}
+                    </div>
+                    <div class="ai-image-prompt">
+                        <strong>Prompt:</strong> ${generatedImage.prompt}
+                    </div>
+                    <div class="ai-image-style">
+                        <strong>Style:</strong> ${generatedImage.style || 'artistic'}
+                    </div>
+                </div>
+                <div class="generated-image-container">
+                    <img src="${imageUrl}" alt="AI Generated: ${generatedImage.prompt}" 
+                         class="generated-image" loading="lazy">
+                </div>
+                <div class="message-actions">
+                    <button class="action-btn" onclick="window.openChat.downloadGeneratedImage('${generatedImage.url}')">
+                        💾 Download
+                    </button>
+                    <button class="action-btn" onclick="navigator.clipboard.writeText('${generatedImage.prompt}')">
+                        📋 Copy Prompt
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        this.messagesContainer.appendChild(messageDiv);
+        this.scrollToBottom();
+    }
+
+    downloadGeneratedImage(imageUrl) {
+        const link = document.createElement('a');
+        link.href = this.apiBase + imageUrl;
+        link.download = imageUrl.split('/').pop();
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // Creativity controls methods
+    toggleCreativityPanel() {
+        this.creativityPanel.classList.toggle('show');
+    }
+
+    resetCreativityControls() {
+        this.temperatureSlider.value = 0.7;
+        this.topPSlider.value = 0.9;
+        this.updateTemperatureValue();
+        this.updateTopPValue();
+    }
+
+    updateTemperatureValue() {
+        this.temperatureValue.textContent = this.temperatureSlider.value;
+    }
+
+    updateTopPValue() {
+        this.topPValue.textContent = this.topPSlider.value;
+    }
+
+    getCreativitySettings() {
+        return {
+            temperature: parseFloat(this.temperatureSlider.value),
+            top_p: parseFloat(this.topPSlider.value)
+        };
+    }
 }
 
 // Initialize the application when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new OpenChat();
+    window.openChat = new OpenChat();
 });

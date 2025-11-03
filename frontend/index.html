@@ -55,6 +55,95 @@
             gap: 0.5rem;
         }
 
+        .creativity-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .creativity-panel.show {
+            opacity: 1;
+            max-height: 200px;
+        }
+
+        .creativity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .creativity-title {
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin: 0;
+        }
+
+        .creativity-toggle {
+            background: none;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 3px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .creativity-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .creativity-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .creativity-control {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .creativity-label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .creativity-slider {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            appearance: none;
+        }
+
+        .creativity-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .creativity-value {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.7rem;
+            text-align: center;
+        }
+
         .control-button {
             padding: 0.5rem 1rem;
             border: 1px solid rgba(255, 255, 255, 0.3);
@@ -485,6 +574,49 @@
             border-bottom-left-radius: 5px;
         }
 
+        .message.ai-generated {
+            border-left: 4px solid #667eea;
+        }
+
+        .message.ai-generated .message-content {
+            background: linear-gradient(135deg, #f8f9ff 0%, #f1f3ff 100%);
+            border: 1px solid #e0e4ff;
+        }
+
+        .ai-image-info {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .ai-image-info > div {
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-image-info > div:last-child {
+            margin-bottom: 0;
+        }
+
+        .generated-image-container {
+            text-align: center;
+            margin: 1rem 0;
+        }
+
+        .generated-image {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .generated-image:hover {
+            transform: scale(1.02);
+        }
+
         .message-meta {
             display: flex;
             align-items: center;
@@ -821,6 +953,49 @@
                 <button class="control-button danger" id="clear-history-btn" title="Clear all conversation history">
                     🗑️ Clear History
                 </button>
+                <button class="control-button" id="creativity-toggle-btn" title="Toggle AI creativity controls">
+                    🎭 Creativity
+                </button>
+            </div>
+
+            <!-- Hidden AI Creativity Panel -->
+            <div class="creativity-panel" id="creativity-panel">
+                <div class="creativity-header">
+                    <h4 class="creativity-title">🎭 AI Creativity Controls</h4>
+                    <button class="creativity-toggle" id="reset-creativity-btn" title="Reset to defaults">Reset</button>
+                </div>
+                <div class="creativity-controls">
+                    <div class="creativity-control">
+                        <label class="creativity-label" for="temperature-slider">
+                            Temperature (Randomness)
+                        </label>
+                        <input 
+                            type="range" 
+                            id="temperature-slider" 
+                            class="creativity-slider"
+                            min="0.1" 
+                            max="2.0" 
+                            step="0.1" 
+                            value="0.7"
+                        >
+                        <div class="creativity-value" id="temperature-value">0.7</div>
+                    </div>
+                    <div class="creativity-control">
+                        <label class="creativity-label" for="top_p-slider">
+                            Top-p (Focus)
+                        </label>
+                        <input 
+                            type="range" 
+                            id="top_p-slider" 
+                            class="creativity-slider"
+                            min="0.1" 
+                            max="1.0" 
+                            step="0.05" 
+                            value="0.9"
+                        >
+                        <div class="creativity-value" id="top_p-value">0.9</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

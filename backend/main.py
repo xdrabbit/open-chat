@@ -79,12 +79,12 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/")
 async def serve_frontend():
     """Serve the main frontend page"""
-    return FileResponse("../frontend/index.html")
+    return FileResponse("frontend/index.html")
 
 @app.get("/voices")
 async def get_voices():
@@ -163,9 +163,55 @@ async def chat(request: ChatRequest):
         # Enhance query with RAG context if available
         enhanced_query = await enhance_chat_with_rag(request.message, rag_service)
         
-        # Get response from Ollama
+        # Get response from Ollama with function calling capability
         model = request.model or config.OLLAMA_MODEL
-        response_text = await ollama_service.generate_response(enhanced_query, model)
+        
+        # Use enhanced chat with function calling
+        chat_result = await ollama_service.chat_with_functions(
+            enhanced_query, 
+            model,
+            temperature=getattr(request, 'temperature', 0.7),
+            top_p=getattr(request, 'top_p', 0.9)
+        )
+        
+        response_text = chat_result.get("response", "")
+        ai_initiated = chat_result.get("ai_initiated", False)
+        
+        # Handle AI-initiated image generation
+        generated_image = None
+        if ai_initiated and "function_call" in chat_result:
+            function_call = chat_result["function_call"]
+            if function_call["name"] == "generate_image":
+                try:
+                    args = function_call["arguments"]
+                    logger.info(f"AI-initiated image generation: {args.get('reason', 'Creative enhancement')}")
+                    
+                    # Generate image using ComfyUI
+                    image_filename = await comfyui_service.generate_image(
+                        prompt=args["prompt"],
+                        negative_prompt="blurry, low quality, distorted",
+                        width=1024,
+                        height=1024,
+                        steps=30,
+                        cfg=7.5
+                    )
+                    
+                    if image_filename:
+                        # Create URL for the generated image
+                        image_url = f"/temp_audio/{image_filename}"
+                        generated_image = GeneratedImage(
+                            url=image_url,
+                            prompt=args["prompt"],
+                            reason=args.get("reason", "AI creative enhancement"),
+                            style=args.get("style", "artistic"),
+                            ai_initiated=True
+                        )
+                        logger.info(f"AI successfully generated image: {image_url}")
+                    else:
+                        logger.error("AI-initiated image generation failed: No image returned from ComfyUI")
+                        
+                except Exception as e:
+                    logger.error(f"Error in AI-initiated image generation: {e}")
         
         # Save user message (original, not enhanced)
         user_msg = ChatMessage(
@@ -191,12 +237,19 @@ async def chat(request: ChatRequest):
         )
         await conversation_service.save_message(assistant_msg)
         
-        return ChatResponse(
+        # Build response
+        response = ChatResponse(
             response=response_text,
             model=model,
             timestamp=datetime.now(),
             audio_file=audio_file
         )
+        
+        # Add generated image to response if available
+        if generated_image:
+            response.generated_image = generated_image
+        
+        return response
         
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -577,5 +630,5 @@ if __name__ == "__main__":
         "main:app",
         host=config.HOST,
         port=config.PORT,
-        reload=config.DEBUG
+        reload=False  # Temporarily disable reload for testing
     )

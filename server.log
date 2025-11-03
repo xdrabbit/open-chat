@@ -1,0 +1,232 @@
+INFO:services.stt_service:Loading Whisper model: base
+INFO:services.stt_service:✅ Whisper model loaded successfully
+ERROR:services.tts_service:Failed to initialize pyttsx3: SetVoiceByName failed with unknown return code -1 for voice: gmw/en
+INFO:services.rag_service:Loading embedding model: all-MiniLM-L6-v2
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cuda:0
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:services.rag_service:✅ Embedding model loaded
+INFO:services.stt_service:Loading Whisper model: base
+INFO:services.stt_service:✅ Whisper model loaded successfully
+ERROR:services.tts_service:Failed to initialize pyttsx3: SetVoiceByName failed with unknown return code -1 for voice: gmw/en
+INFO:services.rag_service:Loading embedding model: all-MiniLM-L6-v2
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cuda:0
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+INFO:services.rag_service:✅ Embedding model loaded
+INFO:     Started server process [270266]
+INFO:     Waiting for application startup.
+INFO:main:Starting Open Chat application...
+INFO:services.conversation_service:✅ SQLite database initialized: ./conversations.db
+INFO:services.rag_service:✅ Vector store database initialized
+INFO:services.rag_service:✅ RAG service initialized and enabled
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:main:✅ Ollama connection successful
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:37422 - "GET /conversations/stats HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://api.elevenlabs.io/v1/voices "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:37428 - "GET /voices HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37466 - "GET /conversations HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:37438 - "GET /health HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:services.vision_service:Available vision models: ['bakllava:latest', 'llava:latest']
+INFO:     127.0.0.1:37454 - "GET /models HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/queue "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:37436 - "GET /comfyui/status HTTP/1.1" 200 OK
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.14it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.13it/s]
+INFO:services.ollama_service:Detected visual request: draw me a futuristic city
+INFO:httpx:HTTP Request: POST http://localhost:11434/api/chat "HTTP/1.1 200 OK"
+INFO:main:AI-initiated image generation: Visual illustration requested by user
+INFO:httpx:HTTP Request: POST http://192.168.0.45:8188/prompt "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Queued prompt with ID: 4485cf45-8784-47e5-82c7-bede5eb53cdd
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Prompt 4485cf45-8784-47e5-82c7-bede5eb53cdd completed successfully
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/4485cf45-8784-47e5-82c7-bede5eb53cdd "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Found 1 generated images for prompt 4485cf45-8784-47e5-82c7-bede5eb53cdd
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/view?filename=OpenChat_generated_00003_.png "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Downloaded image: OpenChat_generated_00003_.png -> ./temp_audio/comfyui_4485cf45-8784-47e5-82c7-bede5eb53cdd_OpenChat_generated_00003_.png
+INFO:main:AI successfully generated image: /temp_audio/comfyui_4485cf45-8784-47e5-82c7-bede5eb53cdd_OpenChat_generated_00003_.png
+INFO:httpx:HTTP Request: POST https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM?optimize_streaming_latency=0&output_format=mp3_44100_128 "HTTP/1.1 200 OK"
+INFO:services.tts_service:Generated ElevenLabs TTS: tts_6a502ec5999f4b2180d53ec540bbfb88_1762193916.mp3
+INFO:     127.0.0.1:34422 - "POST /chat HTTP/1.1" 200 OK
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 89.59it/s]
+INFO:services.ollama_service:Detected visual request: visualize a peaceful mountain landscape
+INFO:     127.0.0.1:50534 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50534 - "GET /static/chat.js HTTP/1.1" 304 Not Modified
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50534 - "GET /health HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://api.elevenlabs.io/v1/voices "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50520 - "GET /voices HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://localhost:11434/api/chat "HTTP/1.1 200 OK"
+INFO:main:AI-initiated image generation: Visual illustration requested by user
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50564 - "GET /conversations/stats HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST http://192.168.0.45:8188/prompt "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Queued prompt with ID: b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7
+INFO:     127.0.0.1:50556 - "GET /conversations HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:services.vision_service:Available vision models: ['bakllava:latest', 'llava:latest']
+INFO:     127.0.0.1:50548 - "GET /models HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/queue "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50542 - "GET /comfyui/status HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Prompt b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 completed successfully
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7 "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Found 1 generated images for prompt b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/view?filename=OpenChat_generated_00004_.png "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Downloaded image: OpenChat_generated_00004_.png -> ./temp_audio/comfyui_b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7_OpenChat_generated_00004_.png
+INFO:main:AI successfully generated image: /temp_audio/comfyui_b2a87d5b-39dc-4bb4-ad2c-fafa577ffaa7_OpenChat_generated_00004_.png
+INFO:httpx:HTTP Request: POST https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM?optimize_streaming_latency=0&output_format=mp3_44100_128 "HTTP/1.1 200 OK"
+INFO:services.tts_service:Generated ElevenLabs TTS: tts_4c57833ff1a74b68869c7e81ed775146_1762194017.mp3
+INFO:     127.0.0.1:50506 - "POST /chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56430 - "GET / HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://api.elevenlabs.io/v1/voices "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56432 - "GET /voices HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56456 - "GET /conversations/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56436 - "GET /conversations HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56430 - "GET /health HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:services.vision_service:Available vision models: ['bakllava:latest', 'llava:latest']
+INFO:     127.0.0.1:56442 - "GET /models HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/queue "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56446 - "GET /comfyui/status HTTP/1.1" 200 OK
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 92.61it/s]
+INFO:services.ollama_service:Detected visual request: visualize a peaceful mountain landscape
+INFO:httpx:HTTP Request: POST http://localhost:11434/api/chat "HTTP/1.1 200 OK"
+INFO:main:AI-initiated image generation: Visual illustration requested by user
+INFO:httpx:HTTP Request: POST http://192.168.0.45:8188/prompt "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Queued prompt with ID: 17cba471-d4ec-41bf-a32b-757fbb5b667d
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Prompt 17cba471-d4ec-41bf-a32b-757fbb5b667d completed successfully
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/history/17cba471-d4ec-41bf-a32b-757fbb5b667d "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Found 1 generated images for prompt 17cba471-d4ec-41bf-a32b-757fbb5b667d
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/view?filename=OpenChat_generated_00005_.png "HTTP/1.1 200 OK"
+INFO:services.comfyui_service:Downloaded image: OpenChat_generated_00005_.png -> ./temp_audio/comfyui_17cba471-d4ec-41bf-a32b-757fbb5b667d_OpenChat_generated_00005_.png
+INFO:main:AI successfully generated image: /temp_audio/comfyui_17cba471-d4ec-41bf-a32b-757fbb5b667d_OpenChat_generated_00005_.png
+INFO:httpx:HTTP Request: POST https://api.elevenlabs.io/v1/text-to-speech/1wEiLSNI4JApHVHoRa8A?optimize_streaming_latency=0&output_format=mp3_44100_128 "HTTP/1.1 200 OK"
+INFO:services.tts_service:Generated ElevenLabs TTS: tts_e257c99b65744a2abe626cfd3fb2ebaf_1762194325.mp3
+INFO:     127.0.0.1:58588 - "POST /chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58588 - "GET /temp_audio/comfyui_17cba471-d4ec-41bf-a32b-757fbb5b667d_OpenChat_generated_00005_.png HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58588 - "GET /audio/tts_e257c99b65744a2abe626cfd3fb2ebaf_1762194325.mp3 HTTP/1.1" 206 Partial Content
+INFO:     127.0.0.1:58588 - "GET /favicon.ico HTTP/1.1" 404 Not Found
