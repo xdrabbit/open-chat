@@ -80,6 +80,7 @@ app.add_middleware(
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
+app.mount("/temp_audio", StaticFiles(directory="temp_audio"), name="temp_audio")
 
 @app.get("/")
 async def serve_frontend():
