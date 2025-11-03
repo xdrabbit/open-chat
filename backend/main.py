@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -15,6 +15,7 @@ from services.stt_service import STTService
 from services.tts_service import TTSService
 from services.conversation_service import ConversationService
 from services.rag_service import create_rag_service, enhance_chat_with_rag
+from services.vision_service import VisionService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +35,7 @@ stt_service = STTService()
 tts_service = TTSService()
 conversation_service = ConversationService()
 rag_service = create_rag_service()
+vision_service = VisionService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -108,13 +110,31 @@ async def get_voices():
 
 @app.get("/models")
 async def get_models():
-    """Get available Ollama models"""
+    """Get available Ollama models with vision capabilities info"""
     try:
         models = await ollama_service.get_available_models()
-        return {"models": models}
+        vision_models = await vision_service.get_available_vision_models()
+        
+        # Add vision capability info to each model
+        models_with_vision = []
+        for model in models:
+            models_with_vision.append({
+                "name": model,
+                "supports_vision": model in vision_models
+            })
+        
+        return {
+            "models": models,
+            "models_with_info": models_with_vision,
+            "vision_models": vision_models
+        }
     except Exception as e:
         logger.error(f"Failed to fetch models: {e}")
-        return {"models": [config.OLLAMA_MODEL]}
+        return {
+            "models": [config.OLLAMA_MODEL],
+            "models_with_info": [{"name": config.OLLAMA_MODEL, "supports_vision": False}],
+            "vision_models": []
+        }
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -172,6 +192,98 @@ async def chat(request: ChatRequest):
         return ChatResponse(
             response=response_text,
             model=model,
+            timestamp=datetime.now(),
+            audio_file=audio_file
+        )
+        
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat-vision", response_model=ChatResponse)
+async def chat_with_vision(
+    message: str = Form(...),
+    model: str = Form(None),
+    voice_id: str = Form(None),
+    image: UploadFile = File(None)
+):
+    """Process chat message with optional image and return response"""
+    try:
+        # Determine model to use
+        selected_model = model or config.OLLAMA_MODEL
+        
+        # Check if image is provided and model supports vision
+        if image:
+            # Validate image
+            image_data = await image.read()
+            if not vision_service.validate_image(image_data):
+                raise HTTPException(status_code=400, detail="Invalid image format")
+            
+            # Check if model supports vision
+            if not await vision_service.is_vision_model(selected_model):
+                # Try to find a vision model
+                vision_models = await vision_service.get_available_vision_models()
+                if vision_models:
+                    selected_model = vision_models[0]  # Use first available vision model
+                    logger.info(f"Switched to vision model: {selected_model}")
+                else:
+                    raise HTTPException(status_code=400, detail="No vision models available for image analysis")
+            
+            # Get conversation context for better responses
+            recent_messages = await conversation_service.get_recent_messages(5)
+            context = [{"role": msg["role"], "content": msg["content"]} for msg in recent_messages]
+            
+            # Analyze image with vision model
+            response_text = await vision_service.chat_with_image(
+                message, image_data, selected_model, context
+            )
+            
+            # Save image to temp directory for display
+            image_filename = f"upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image.filename}"
+            image_path = os.path.join(config.AUDIO_TEMP_DIR, image_filename)
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+            
+            # Save user message with image reference
+            user_msg = ChatMessage(
+                role="user",
+                content=f"{message} [Image: {image_filename}]",
+                timestamp=datetime.now()
+            )
+            
+        else:
+            # Regular text chat without image
+            enhanced_query = await enhance_chat_with_rag(message, rag_service)
+            response_text = await ollama_service.generate_response(enhanced_query, selected_model)
+            
+            # Save user message
+            user_msg = ChatMessage(
+                role="user",
+                content=message,
+                timestamp=datetime.now()
+            )
+        
+        await conversation_service.save_message(user_msg)
+        
+        # Generate TTS audio for the response
+        audio_file = None
+        try:
+            audio_file = await tts_service.generate_speech(response_text, voice_id)
+        except Exception as e:
+            logger.warning(f"TTS generation failed: {e}")
+        
+        # Save assistant message
+        assistant_msg = ChatMessage(
+            role="assistant",
+            content=response_text,
+            timestamp=datetime.now(),
+            audio_file=audio_file
+        )
+        await conversation_service.save_message(assistant_msg)
+        
+        return ChatResponse(
+            response=response_text,
+            model=selected_model,
             timestamp=datetime.now(),
             audio_file=audio_file
         )
@@ -367,6 +479,19 @@ async def list_rag_documents():
         return {"documents": documents}
     except Exception as e:
         logger.error(f"Error listing RAG documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/images/{filename}")
+async def serve_image(filename: str):
+    """Serve uploaded images"""
+    try:
+        image_path = os.path.join(config.AUDIO_TEMP_DIR, filename)
+        if os.path.exists(image_path):
+            return FileResponse(image_path)
+        else:
+            raise HTTPException(status_code=404, detail="Image not found")
+    except Exception as e:
+        logger.error(f"Error serving image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

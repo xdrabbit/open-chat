@@ -354,6 +354,82 @@
             display: flex;
             gap: 1rem;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .image-upload-section {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .image-input {
+            display: none;
+        }
+
+        .image-preview {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            object-fit: cover;
+            cursor: pointer;
+        }
+
+        .image-preview-container {
+            position: relative;
+            display: none;
+        }
+
+        .image-preview-container.show {
+            display: block;
+        }
+
+        .remove-image {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vision-indicator {
+            font-size: 0.8rem;
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            margin-left: 0.5rem;
+        }
+
+        .message-image {
+            max-width: 300px;
+            max-height: 300px;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            cursor: pointer;
+            border: 1px solid #e0e0e0;
+        }
+
+        .message-image:hover {
+            opacity: 0.9;
         }
 
         .text-input {
@@ -411,6 +487,22 @@
         .mic-btn.recording {
             background: #f44336;
             animation: pulse 1s infinite;
+        }
+
+        .image-btn {
+            background: #FF9800;
+            color: white;
+        }
+
+        .image-btn:hover {
+            background: #F57C00;
+            transform: scale(1.05);
+        }
+
+        .image-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
         }
 
         @keyframes pulse {
@@ -586,19 +678,32 @@
 
         <div class="input-container">
             <div class="input-row">
-                <input 
-                    type="text" 
-                    class="text-input" 
-                    id="message-input" 
-                    placeholder="Type your message or click the microphone to speak..."
-                    maxlength="2000"
-                >
-                <button class="control-btn mic-btn" id="mic-btn" title="Click to speak">
-                    🎤
-                </button>
-                <button class="control-btn send-btn" id="send-btn" title="Send message">
-                    ➤
-                </button>
+                <div class="input-section">
+                    <input 
+                        type="text" 
+                        class="text-input" 
+                        id="message-input" 
+                        placeholder="Type your message or click the microphone to speak..."
+                        maxlength="2000"
+                    >
+                </div>
+                
+                <div class="image-upload-section">
+                    <input type="file" id="image-input" class="image-input" accept="image/*">
+                    <div class="image-preview-container" id="image-preview-container">
+                        <img id="image-preview" class="image-preview" alt="Image preview">
+                        <button class="remove-image" id="remove-image" title="Remove image">×</button>
+                    </div>
+                    <button class="control-btn image-btn" id="image-btn" title="Upload image">
+                        📷
+                    </button>
+                    <button class="control-btn mic-btn" id="mic-btn" title="Click to speak">
+                        🎤
+                    </button>
+                    <button class="control-btn send-btn" id="send-btn" title="Send message">
+                        ➤
+                    </button>
+                </div>
             </div>
             
             <div class="settings">

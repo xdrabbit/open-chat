@@ -29,6 +29,16 @@ class OpenChat {
         this.ttsSelect = document.getElementById('tts-select');
         this.voiceSelect = document.getElementById('voice-select');
         
+        // Image upload elements
+        this.imageBtn = document.getElementById('image-btn');
+        this.imageInput = document.getElementById('image-input');
+        this.imagePreview = document.getElementById('image-preview');
+        this.imagePreviewContainer = document.getElementById('image-preview-container');
+        this.removeImageBtn = document.getElementById('remove-image');
+        
+        // Current image data
+        this.currentImageFile = null;
+        
         // Status indicators
         this.ollamaStatus = document.getElementById('ollama-status');
         this.ttsStatus = document.getElementById('tts-status');
@@ -64,10 +74,20 @@ class OpenChat {
         this.messageInput.addEventListener('input', () => {
             this.sendBtn.disabled = !this.messageInput.value.trim() || this.isLoading;
         });
+        
+        // Model selection change handler
+        this.modelSelect.addEventListener('change', () => {
+            this.updateImageButtonState();
+        });
 
         // Conversation controls
         this.loadHistoryBtn.addEventListener('click', () => this.reloadConversationHistory());
         this.clearHistoryBtn.addEventListener('click', () => this.clearConversationHistory());
+
+        // Image upload controls
+        this.imageBtn.addEventListener('click', () => this.imageInput.click());
+        this.imageInput.addEventListener('change', () => this.handleImageSelection());
+        this.removeImageBtn.addEventListener('click', () => this.removeImage());
 
         // RAG controls
         this.fileInput.addEventListener('change', () => this.handleFileUpload());
@@ -188,18 +208,32 @@ class OpenChat {
             // Clear existing options
             this.modelSelect.innerHTML = '';
             
-            // Add models
-            data.models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model;
-                option.textContent = model;
-                this.modelSelect.appendChild(option);
-            });
+            // Add models with vision indicators
+            if (data.models_with_info) {
+                data.models_with_info.forEach(modelInfo => {
+                    const option = document.createElement('option');
+                    option.value = modelInfo.name;
+                    option.textContent = modelInfo.name + (modelInfo.supports_vision ? ' 👁️' : '');
+                    option.dataset.supportsVision = modelInfo.supports_vision;
+                    this.modelSelect.appendChild(option);
+                });
+            } else {
+                // Fallback to simple list
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    this.modelSelect.appendChild(option);
+                });
+            }
             
             // Set default model
-            if (data.models.length > 0) {
+            if (data.models && data.models.length > 0) {
                 this.modelSelect.value = data.models[0];
             }
+            
+            // Update image button availability
+            this.updateImageButtonState();
             
         } catch (error) {
             console.error('Failed to load models:', error);
@@ -235,21 +269,41 @@ class OpenChat {
         this.setLoading(true);
         this.messageInput.value = '';
 
-        // Add user message to UI
-        this.addMessage(message, 'user');
+        // Check if we have an image
+        const hasImage = this.currentImageFile !== null;
+        
+        // Add user message to UI (with image if present)
+        this.addMessage(message, 'user', null, null, false, this.currentImageFile);
 
         try {
-            const response = await fetch(`${this.apiBase}/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: message,
-                    model: this.modelSelect.value,
-                    voice_id: this.voiceSelect.value
-                })
-            });
+            let response;
+            
+            if (hasImage) {
+                // Use vision endpoint with FormData
+                const formData = new FormData();
+                formData.append('message', message);
+                formData.append('model', this.modelSelect.value);
+                formData.append('voice_id', this.voiceSelect.value);
+                formData.append('image', this.currentImageFile);
+                
+                response = await fetch(`${this.apiBase}/chat-vision`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                // Use regular text endpoint
+                response = await fetch(`${this.apiBase}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        model: this.modelSelect.value,
+                        voice_id: this.voiceSelect.value
+                    })
+                });
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -263,6 +317,11 @@ class OpenChat {
             // Auto-play audio if available
             if (data.audio_file) {
                 setTimeout(() => this.playAudio(data.audio_file), 500);
+            }
+            
+            // Clear image after successful send
+            if (hasImage) {
+                this.removeImage();
             }
 
         } catch (error) {
@@ -427,12 +486,24 @@ class OpenChat {
         }
     }
 
-    addMessage(content, role, audioFile = null, timestamp = null, isError = false) {
+    addMessage(content, role, audioFile = null, timestamp = null, isError = false, imageFile = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}`;
         
         const contentDiv = document.createElement('div');
         contentDiv.className = `message-content ${isError ? 'error' : ''}`;
+        
+        // Add image if provided (for user messages)
+        if (imageFile && role === 'user') {
+            const imageDiv = document.createElement('div');
+            const img = document.createElement('img');
+            img.className = 'message-image';
+            img.src = URL.createObjectURL(imageFile);
+            img.alt = 'Uploaded image';
+            img.onclick = () => window.open(img.src, '_blank');
+            imageDiv.appendChild(img);
+            contentDiv.appendChild(imageDiv);
+        }
         
         const textDiv = document.createElement('div');
         textDiv.textContent = content;
@@ -801,6 +872,61 @@ class OpenChat {
         this.uploadProgressBar.style.width = '0%';
         this.fileDropZone.querySelector('.drop-text').textContent = 'Drag & drop documents here';
         this.fileDropZone.querySelector('.drop-hint').textContent = 'or click to browse (.txt, .md, .pdf, .docx)';
+    }
+
+    // Image handling methods
+    handleImageSelection() {
+        const file = this.imageInput.files[0];
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('Please select a valid image file.');
+            return;
+        }
+
+        // Check file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Image file too large. Please select an image under 10MB.');
+            return;
+        }
+
+        this.currentImageFile = file;
+        
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.imagePreview.src = e.target.result;
+            this.imagePreviewContainer.classList.add('show');
+            this.updateImageButtonState();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    removeImage() {
+        this.currentImageFile = null;
+        this.imageInput.value = '';
+        this.imagePreviewContainer.classList.remove('show');
+        this.imagePreview.src = '';
+        this.updateImageButtonState();
+    }
+
+    updateImageButtonState() {
+        const selectedOption = this.modelSelect.selectedOptions[0];
+        const supportsVision = selectedOption && selectedOption.dataset.supportsVision === 'true';
+        
+        if (supportsVision) {
+            this.imageBtn.disabled = false;
+            this.imageBtn.title = 'Upload image for AI analysis';
+        } else {
+            this.imageBtn.disabled = true;
+            this.imageBtn.title = 'Select a vision model to upload images';
+            
+            // Remove current image if model doesn't support vision
+            if (this.currentImageFile) {
+                this.removeImage();
+            }
+        }
     }
 }
 
