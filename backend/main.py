@@ -185,16 +185,13 @@ async def chat(request: ChatRequest):
             if function_call["name"] == "generate_image":
                 try:
                     args = function_call["arguments"]
-                    logger.info(f"AI-initiated image generation: {args.get('reason', 'Creative enhancement')}")
+                    logger.info(f"🎨 AI-initiated image generation: {args.get('reason', 'Creative enhancement')}")
                     
-                    # Generate image using ComfyUI
+                    # Generate image using intelligent ComfyUI selection
                     image_filename = await comfyui_service.generate_image(
                         prompt=args["prompt"],
-                        negative_prompt="blurry, low quality, distorted",
-                        width=1024,
-                        height=1024,
-                        steps=30,
-                        cfg=7.5
+                        style=args.get("style", "artistic")
+                        # Let intelligent system handle negative_prompt, dimensions, steps, cfg
                     )
                     
                     if image_filename:
@@ -207,7 +204,7 @@ async def chat(request: ChatRequest):
                             style=args.get("style", "artistic"),
                             ai_initiated=True
                         )
-                        logger.info(f"AI successfully generated image: {image_url}")
+                        logger.info(f"✅ AI successfully generated {args.get('style', 'artistic')} image: {image_url}")
                     else:
                         logger.error("AI-initiated image generation failed: No image returned from ComfyUI")
                         

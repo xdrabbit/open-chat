@@ -1,7 +1,7 @@
 import httpx
 import json
 import logging
-from typing import Optional, AsyncGenerator, Dict, Any, List
+from typing import Optional, AsyncGenerator, Dict, Any, List, Tuple
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -90,8 +90,8 @@ class OllamaService:
                 # Get a regular chat response first (avoid recursion by calling base chat directly)
                 regular_response = await self._chat_without_functions(message, model, context, temperature, top_p)
                 
-                # Create an image prompt based on the request
-                image_prompt = self._create_image_prompt_from_request(message)
+                # Create an image prompt and detect style from the request
+                image_prompt, detected_style = self._create_image_prompt_from_request(message)
                 
                 return {
                     "response": regular_response,
@@ -100,7 +100,7 @@ class OllamaService:
                         "arguments": {
                             "prompt": image_prompt,
                             "reason": "Visual illustration requested by user",
-                            "style": "artistic"
+                            "style": detected_style or "artistic"
                         }
                     },
                     "ai_initiated": True
@@ -337,24 +337,45 @@ Only use the function call if the user's request would genuinely benefit from vi
             logger.error(f"Failed to pull model {model_name}: {e}")
             return False
 
-    def _create_image_prompt_from_request(self, message: str) -> str:
-        """Create a detailed image prompt from user request"""
+    def _create_image_prompt_from_request(self, message: str) -> Tuple[str, Optional[str]]:
+        """Create a detailed image prompt and detect style from user request"""
         message_lower = message.lower()
         
-        # Extract key visual elements from the request
+        # Detect style preferences from the request
+        style = None
+        if any(word in message_lower for word in ["realistic", "photorealistic", "real", "photo"]):
+            style = "realistic"
+        elif any(word in message_lower for word in ["hyperrealistic", "ultra realistic", "extremely realistic"]):
+            style = "very_realistic"
+        elif any(word in message_lower for word in ["cartoon", "stylized", "character", "semi-realistic"]):
+            style = "semi_realistic"
+        elif any(word in message_lower for word in ["artistic", "painting", "art", "beautiful"]):
+            style = "artistic"
+        elif any(word in message_lower for word in ["concept", "fantasy", "sci-fi", "cinematic"]):
+            style = "concept_art"
+        
+        # Extract key visual elements from the request (simplified now since intelligence handles enhancement)
         if "garden" in message_lower:
-            return "A beautiful, serene garden with colorful flowers, lush greenery, winding paths, and peaceful atmosphere, detailed artistic illustration"
+            prompt = "A beautiful, serene garden with colorful flowers, lush greenery, winding paths, and peaceful atmosphere"
         elif "city" in message_lower and ("futuristic" in message_lower or "future" in message_lower):
-            return "A stunning futuristic cityscape with gleaming skyscrapers, flying vehicles, advanced architecture, and vibrant lighting, digital art style"
+            prompt = "A stunning futuristic cityscape with gleaming skyscrapers, flying vehicles, advanced architecture, and vibrant lighting"
         elif "horse" in message_lower:
-            return "A majestic white horse galloping freely in a green meadow with dramatic clouds overhead, artistic painting style"
+            prompt = "A majestic white horse galloping freely in a green meadow with dramatic clouds overhead"
         elif "chariot" in message_lower:
-            return "An ornate golden chariot with intricate details, pulled by powerful horses, set against a dramatic sky with clouds, classical art style"
+            prompt = "An ornate golden chariot with intricate details, pulled by powerful horses, set against a dramatic sky with clouds"
         elif "music" in message_lower:
-            return "An artistic visualization of music with flowing sound waves, musical notes floating in air, vibrant colors representing harmony and rhythm, abstract art style"
+            prompt = "An artistic visualization of music with flowing sound waves, musical notes floating in air, vibrant colors representing harmony and rhythm"
+        elif "sunset" in message_lower:
+            prompt = "A breathtaking sunset with vibrant colors painting the sky, golden light reflecting on the landscape"
+        elif "atom" in message_lower and "split" in message_lower:
+            prompt = "A scientific visualization of atomic structure with orbiting electrons, energy particles, and nuclear reactions"
         else:
-            # Generic fallback based on keywords
-            return f"A detailed artistic illustration based on: {message}, beautiful composition, vibrant colors, professional art style"
+            # Generic fallback - let the intelligence enhance it
+            prompt = message.replace("show me", "").replace("draw", "").replace("create", "").replace("generate", "").strip()
+            if not prompt:
+                prompt = "A beautiful artistic illustration"
+        
+        return prompt, style
     
     async def _chat_without_functions(
         self, 

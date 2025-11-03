@@ -11,6 +11,7 @@ import os
 import time
 
 from config import config
+from .workflow_intelligence import WorkflowIntelligence, ModelSelector
 
 logger = logging.getLogger(__name__)
 
@@ -249,18 +250,38 @@ class ComfyUIService:
     async def generate_image(self, prompt: str, negative_prompt: str = "", 
                            width: int = 1024, height: int = 1024,
                            steps: int = 20, cfg: float = 8.0,
-                           model: str = None) -> Optional[str]:
-        """Generate an image and return the local filename"""
+                           model: Optional[str] = None, style: Optional[str] = None) -> Optional[str]:
+        """Generate an image using intelligent workflow selection"""
         try:
-            # Create workflow
+            # Use intelligent workflow creation
+            workflow_config = WorkflowIntelligence.create_intelligent_workflow(
+                prompt=prompt, 
+                style=style,
+                user_params={
+                    "width": width,
+                    "height": height, 
+                    "steps": steps,
+                    "cfg": cfg
+                } if model else None  # Only override if user provided specific params
+            )
+            
+            # Use intelligent config unless user specified specific model
+            final_model = model if model else workflow_config["model"]
+            final_prompt = workflow_config["prompt"]
+            final_negative = negative_prompt if negative_prompt else workflow_config["negative_prompt"]
+            final_params = workflow_config["parameters"]
+            
+            logger.info(f"🧠 Intelligent generation - Model: {final_model}, Style: {workflow_config['style']}")
+            
+            # Create workflow with intelligent parameters
             workflow = self.create_text2img_workflow(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg=cfg,
-                model=model
+                prompt=final_prompt,
+                negative_prompt=final_negative,
+                width=final_params["width"],
+                height=final_params["height"],
+                steps=final_params["steps"],
+                cfg=final_params["cfg"],
+                model=final_model
             )
             
             # Queue the prompt
@@ -283,12 +304,13 @@ class ComfyUIService:
             local_path = os.path.join(config.AUDIO_TEMP_DIR, local_filename)
             
             if await self.download_image(remote_filename, local_path):
+                logger.info(f"✅ Generated image with {workflow_config['style']} style: {local_filename}")
                 return local_filename
             
             return None
             
         except Exception as e:
-            logger.error(f"Error in generate_image: {e}")
+            logger.error(f"Error in intelligent generate_image: {e}")
             return None
     
     async def get_queue_status(self) -> Dict[str, Any]:
