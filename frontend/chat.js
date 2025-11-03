@@ -5,6 +5,7 @@ class OpenChat {
         this.mediaRecorder = null;
         this.audioChunks = [];
         this.isLoading = false;
+        this.isGenerating = false;
         
         // Audio playback management
         this.currentAudio = null;
@@ -17,6 +18,7 @@ class OpenChat {
         this.loadModels();
         this.loadConversationHistory();
         this.loadConversationStats();
+        this.checkComfyUIStatus();
     }
 
     initializeElements() {
@@ -58,6 +60,19 @@ class OpenChat {
         this.fileDropZone = document.getElementById('file-drop-zone');
         this.uploadProgress = document.getElementById('upload-progress');
         this.uploadProgressBar = document.getElementById('upload-progress-bar');
+        
+        // ComfyUI elements
+        this.comfyuiStatus = document.getElementById('comfyui-status');
+        this.imagePrompt = document.getElementById('image-prompt');
+        this.negativePrompt = document.getElementById('negative-prompt');
+        this.imageWidth = document.getElementById('image-width');
+        this.imageHeight = document.getElementById('image-height');
+        this.imageSteps = document.getElementById('image-steps');
+        this.imageCfg = document.getElementById('image-cfg');
+        this.generateBtn = document.getElementById('generate-btn');
+        this.generationProgress = document.getElementById('generation-progress');
+        this.progressFill = document.getElementById('progress-fill');
+        this.progressText = document.getElementById('progress-text');
     }
 
     bindEvents() {
@@ -92,6 +107,10 @@ class OpenChat {
         // RAG controls
         this.fileInput.addEventListener('change', () => this.handleFileUpload());
         this.setupDragAndDrop();
+
+        // ComfyUI controls
+        this.generateBtn.addEventListener('click', () => this.generateImage());
+        this.imagePrompt.addEventListener('input', () => this.updateGenerateButton());
 
         // Auto-scroll messages
         this.messagesContainer.addEventListener('DOMNodeInserted', () => {
@@ -927,6 +946,161 @@ class OpenChat {
                 this.removeImage();
             }
         }
+    }
+
+    // ComfyUI Integration Methods
+    async checkComfyUIStatus() {
+        try {
+            const response = await fetch(`${this.apiBase}/comfyui/status`);
+            const status = await response.json();
+            
+            this.updateComfyUIStatus(status.connected, status.system_info);
+            this.updateGenerateButton();
+        } catch (error) {
+            console.error('Error checking ComfyUI status:', error);
+            this.updateComfyUIStatus(false);
+        }
+    }
+
+    updateComfyUIStatus(connected, systemInfo = null) {
+        if (connected) {
+            this.comfyuiStatus.textContent = 'Connected';
+            this.comfyuiStatus.classList.add('connected');
+            
+            if (systemInfo) {
+                const version = systemInfo.comfyui_version || 'Unknown';
+                this.comfyuiStatus.title = `ComfyUI v${version} - Ready for image generation`;
+            }
+        } else {
+            this.comfyuiStatus.textContent = 'Disconnected';
+            this.comfyuiStatus.classList.remove('connected');
+            this.comfyuiStatus.title = 'ComfyUI not available';
+        }
+    }
+
+    updateGenerateButton() {
+        const hasPrompt = this.imagePrompt.value.trim().length > 0;
+        const isConnected = this.comfyuiStatus.classList.contains('connected');
+        
+        this.generateBtn.disabled = !hasPrompt || !isConnected || this.isGenerating;
+    }
+
+    async generateImage() {
+        if (this.isGenerating) return;
+        
+        const prompt = this.imagePrompt.value.trim();
+        if (!prompt) {
+            alert('Please enter a prompt for image generation');
+            return;
+        }
+
+        this.isGenerating = true;
+        this.showGenerationProgress();
+        this.updateGenerateButton();
+
+        try {
+            const formData = new FormData();
+            formData.append('prompt', prompt);
+            formData.append('negative_prompt', this.negativePrompt.value.trim());
+            formData.append('width', this.imageWidth.value);
+            formData.append('height', this.imageHeight.value);
+            formData.append('steps', this.imageSteps.value);
+            formData.append('cfg', this.imageCfg.value);
+
+            this.updateProgress(0, 'Preparing generation...');
+
+            const response = await fetch(`${this.apiBase}/comfyui/generate`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`Generation failed: ${response.statusText}`);
+            }
+
+            this.updateProgress(50, 'Processing...');
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.updateProgress(100, 'Complete!');
+                
+                // Add generated image to chat
+                this.addGeneratedImageToChat(result.image_filename, prompt);
+                
+                // Clear the prompt
+                this.imagePrompt.value = '';
+                
+                setTimeout(() => {
+                    this.hideGenerationProgress();
+                }, 2000);
+            } else {
+                throw new Error('Generation failed');
+            }
+
+        } catch (error) {
+            console.error('Error generating image:', error);
+            this.updateProgress(0, 'Generation failed');
+            alert(`Error generating image: ${error.message}`);
+            
+            setTimeout(() => {
+                this.hideGenerationProgress();
+            }, 3000);
+        } finally {
+            this.isGenerating = false;
+            this.updateGenerateButton();
+        }
+    }
+
+    showGenerationProgress() {
+        this.generationProgress.style.display = 'block';
+        this.generateBtn.querySelector('.btn-text').style.display = 'none';
+        this.generateBtn.querySelector('.btn-spinner').style.display = 'inline';
+    }
+
+    hideGenerationProgress() {
+        this.generationProgress.style.display = 'none';
+        this.generateBtn.querySelector('.btn-text').style.display = 'inline';
+        this.generateBtn.querySelector('.btn-spinner').style.display = 'none';
+    }
+
+    updateProgress(percentage, text) {
+        this.progressFill.style.width = `${percentage}%`;
+        this.progressText.textContent = text;
+    }
+
+    addGeneratedImageToChat(imageFilename, prompt) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+        
+        const timestamp = new Date().toLocaleTimeString();
+        
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="message-text">🎨 Generated image: "${prompt}"</div>
+                <div class="message-image">
+                    <img src="${this.apiBase}/images/${imageFilename}" alt="Generated image" style="max-width: 400px; border-radius: 8px; margin-top: 0.5rem;">
+                </div>
+                <div class="message-timestamp">${timestamp}</div>
+                <div class="message-actions">
+                    <button class="action-btn" onclick="this.downloadImage('${imageFilename}')">
+                        💾 Download
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        this.messagesContainer.appendChild(messageDiv);
+        this.scrollToBottom();
+    }
+
+    downloadImage(filename) {
+        const link = document.createElement('a');
+        link.href = `${this.apiBase}/images/${filename}`;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 }
 

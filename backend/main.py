@@ -16,6 +16,7 @@ from services.tts_service import TTSService
 from services.conversation_service import ConversationService
 from services.rag_service import create_rag_service, enhance_chat_with_rag
 from services.vision_service import VisionService
+from services.comfyui_service import ComfyUIService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +37,7 @@ tts_service = TTSService()
 conversation_service = ConversationService()
 rag_service = create_rag_service()
 vision_service = VisionService()
+comfyui_service = ComfyUIService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -483,7 +485,7 @@ async def list_rag_documents():
 
 @app.get("/images/{filename}")
 async def serve_image(filename: str):
-    """Serve uploaded images"""
+    """Serve uploaded or generated images"""
     try:
         image_path = os.path.join(config.AUDIO_TEMP_DIR, filename)
         if os.path.exists(image_path):
@@ -492,6 +494,82 @@ async def serve_image(filename: str):
             raise HTTPException(status_code=404, detail="Image not found")
     except Exception as e:
         logger.error(f"Error serving image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ComfyUI Integration Endpoints
+@app.get("/comfyui/status")
+async def get_comfyui_status():
+    """Get ComfyUI connection status and system info"""
+    try:
+        is_connected = await comfyui_service.health_check()
+        system_info = await comfyui_service.get_system_info() if is_connected else {}
+        queue_status = await comfyui_service.get_queue_status() if is_connected else {}
+        
+        return {
+            "connected": is_connected,
+            "system_info": system_info,
+            "queue_status": queue_status
+        }
+    except Exception as e:
+        logger.error(f"Error getting ComfyUI status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/comfyui/models")
+async def get_comfyui_models():
+    """Get available ComfyUI models"""
+    try:
+        models = await comfyui_service.get_models()
+        return {"models": models}
+    except Exception as e:
+        logger.error(f"Error getting ComfyUI models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/comfyui/generate")
+async def generate_image_comfyui(
+    prompt: str = Form(...),
+    negative_prompt: str = Form(""),
+    width: int = Form(1024),
+    height: int = Form(1024),
+    steps: int = Form(20),
+    cfg: float = Form(8.0),
+    model: str = Form(None)
+):
+    """Generate an image using ComfyUI"""
+    try:
+        logger.info(f"Generating image with prompt: {prompt[:100]}...")
+        
+        # Generate the image
+        image_filename = await comfyui_service.generate_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            steps=steps,
+            cfg=cfg,
+            model=model
+        )
+        
+        if image_filename:
+            # Save generation info to conversation
+            generation_msg = ChatMessage(
+                role="assistant",
+                content=f"🎨 Generated image: '{prompt[:50]}...' using ComfyUI",
+                timestamp=datetime.now(),
+                audio_file=None
+            )
+            await conversation_service.save_message(generation_msg)
+            
+            return {
+                "success": True,
+                "image_filename": image_filename,
+                "prompt": prompt,
+                "timestamp": datetime.now()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Image generation failed")
+            
+    except Exception as e:
+        logger.error(f"Error generating image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
