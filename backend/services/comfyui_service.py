@@ -233,6 +233,8 @@ class ComfyUIService:
                 if response.status_code == 200:
                     with open(save_path, "wb") as f:
                         f.write(response.content)
+                        f.flush()  # Ensure data is written to disk
+                        os.fsync(f.fileno())  # Force OS to write to disk
                     
                     logger.info(f"Downloaded image: {filename} -> {save_path}")
                     return True

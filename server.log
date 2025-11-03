@@ -13,7 +13,7 @@ INFO:services.rag_service:Loading embedding model: all-MiniLM-L6-v2
 INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cuda:0
 INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
 INFO:services.rag_service:✅ Embedding model loaded
-INFO:     Started server process [275718]
+INFO:     Started server process [294615]
 INFO:     Waiting for application startup.
 INFO:main:Starting Open Chat application...
 INFO:services.conversation_service:✅ SQLite database initialized: ./conversations.db
@@ -22,7 +22,21 @@ INFO:services.rag_service:✅ RAG service initialized and enabled
 INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
 INFO:main:✅ Ollama connection successful
 INFO:     Application startup complete.
-ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
-INFO:     Waiting for application shutdown.
-INFO:main:Shutting down Open Chat application...
-INFO:     Application shutdown complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57260 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57260 - "GET /static/chat.js HTTP/1.1" 304 Not Modified
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57260 - "GET /health HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://api.elevenlabs.io/v1/voices "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57270 - "GET /voices HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://localhost:11434/api/tags "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57304 - "GET /conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57288 - "GET /conversations/stats HTTP/1.1" 200 OK
+INFO:services.vision_service:Available vision models: ['bakllava:latest', 'llava:latest']
+INFO:     127.0.0.1:57306 - "GET /models HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/system_stats "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://192.168.0.45:8188/queue "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57284 - "GET /comfyui/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43030 - "GET /rag/stats HTTP/1.1" 200 OK
