@@ -280,6 +280,11 @@ class ComfyUIService:
                            model: Optional[str] = None, style: Optional[str] = None) -> Optional[str]:
         """Generate an image using intelligent workflow selection"""
         try:
+            logger.info(f"🎨 IMAGE GENERATION REQUEST:")
+            logger.info(f"📝 Original Prompt: {prompt}")
+            logger.info(f"🎭 Style: {style}")
+            logger.info(f"📐 Dimensions: {width}x{height}")
+            
             # Use intelligent workflow creation
             workflow_config = WorkflowIntelligence.create_intelligent_workflow(
                 prompt=prompt, 
@@ -295,6 +300,10 @@ class ComfyUIService:
             # Use intelligent config unless user specified specific model
             final_model = model if model else workflow_config["model"]
             final_prompt = workflow_config["prompt"]
+            
+            logger.info(f"🔧 Enhanced Prompt: {final_prompt}")
+            logger.info(f"🤖 Selected Model: {final_model}")
+            logger.info(f"⚙️ Config: steps={workflow_config.get('steps', steps)}, cfg={workflow_config.get('cfg', cfg)}")
             final_negative = negative_prompt if negative_prompt else workflow_config["negative_prompt"]
             final_params = workflow_config["parameters"]
             
