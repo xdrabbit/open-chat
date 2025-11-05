@@ -29,7 +29,7 @@ class ModelSelector:
         "semi_realistic": "realcartoonXL_v7.safetensors", 
         "artistic": "dreamshaperXL_v21TurboDPMSDE.safetensors",
         "very_realistic": "jedpointreal_v1ILVae.safetensors",
-        "concept_art": "ConceptArtXL.safetensors",  # When loaded
+        "concept_art": "dreamshaperXL_v21TurboDPMSDE.safetensors",  # PLACEHOLDER: ConceptArtXL.safetensors not downloaded, using artistic fallback
         "default": "RealVisXL_V5.0_fp16.safetensors"
     }
     

@@ -27,7 +27,7 @@ class Config:
     DB_PATH = os.getenv("DB_PATH", "./conversations.db")
     
     # CORS Configuration
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:*").split(",")
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:*,http://localhost:3001,http://127.0.0.1:*,http://127.0.0.1:3001").split(",")
     
     @classmethod
     def validate_config(cls):

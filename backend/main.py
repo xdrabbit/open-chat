@@ -72,20 +72,18 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.CORS_ORIGINS,
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-app.mount("/temp_audio", StaticFiles(directory="temp_audio"), name="temp_audio")
+# Mount only necessary static files for generated content
+app.mount("/temp_audio", StaticFiles(directory="../temp_audio"), name="temp_audio")
+app.mount("/audio", StaticFiles(directory="../temp_audio"), name="audio")
 
-@app.get("/")
-async def serve_frontend():
-    """Serve the main frontend page"""
-    return FileResponse("frontend/index.html")
+# API-only backend - no frontend serving
+# Frontend will be served by Electron app or separate React dev server
 
 @app.get("/voices")
 async def get_voices():
