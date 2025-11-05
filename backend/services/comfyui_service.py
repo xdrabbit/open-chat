@@ -19,13 +19,13 @@ class ComfyUIService:
     """Service for integrating with ComfyUI for image generation"""
     
     def __init__(self):
-        # Try multiple ComfyUI endpoints in order of preference
+        # ComfyUI is working on Windows host - use that as primary
         self.base_urls = [
-            "http://localhost:8188",         # Local ComfyUI
-            "http://172.18.170.88:8188",     # WSL ComfyUI  
-            "http://192.168.0.45:8188"       # Windows ComfyUI (slowest)
+            "http://192.168.0.45:8188",     # Windows ComfyUI (working!)
+            "http://localhost:8188",         # Local ComfyUI fallback
+            "http://172.18.170.88:8188"      # WSL ComfyUI fallback
         ]
-        self.base_url = self.base_urls[0]  # Start with localhost
+        self.base_url = self.base_urls[0]  # Start with Windows
         self.client_id = str(uuid.uuid4())
         self._tested_url = False
         
@@ -35,7 +35,7 @@ class ComfyUIService:
             # Test URLs in order and use the first working one
             for url in self.base_urls:
                 try:
-                    async with httpx.AsyncClient(timeout=1.0) as client:  # Very fast timeout
+                    async with httpx.AsyncClient(timeout=3.0) as client:  # Reasonable timeout
                         response = await client.get(f"{url}/system_stats")
                         if response.status_code == 200:
                             self.base_url = url
@@ -52,7 +52,7 @@ class ComfyUIService:
         
         # Quick check if already tested
         try:
-            async with httpx.AsyncClient(timeout=1.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 response = await client.get(f"{self.base_url}/system_stats")
                 return response.status_code == 200
         except Exception as e:
