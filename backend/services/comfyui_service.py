@@ -19,13 +19,40 @@ class ComfyUIService:
     """Service for integrating with ComfyUI for image generation"""
     
     def __init__(self):
-        self.base_url = "http://192.168.0.45:8188"
+        # Try multiple ComfyUI endpoints in order of preference
+        self.base_urls = [
+            "http://localhost:8188",         # Local ComfyUI
+            "http://172.18.170.88:8188",     # WSL ComfyUI  
+            "http://192.168.0.45:8188"       # Windows ComfyUI (slowest)
+        ]
+        self.base_url = self.base_urls[0]  # Start with localhost
         self.client_id = str(uuid.uuid4())
+        self._tested_url = False
         
     async def health_check(self) -> bool:
-        """Check if ComfyUI is accessible"""
+        """Check if ComfyUI is accessible with fast timeout and URL fallback"""
+        if not self._tested_url:
+            # Test URLs in order and use the first working one
+            for url in self.base_urls:
+                try:
+                    async with httpx.AsyncClient(timeout=1.0) as client:  # Very fast timeout
+                        response = await client.get(f"{url}/system_stats")
+                        if response.status_code == 200:
+                            self.base_url = url
+                            self._tested_url = True
+                            logger.info(f"✅ ComfyUI connected at: {url}")
+                            return True
+                except Exception:
+                    continue
+            
+            # No working URL found
+            self._tested_url = True
+            logger.warning("⚠️ ComfyUI not available at any endpoint")
+            return False
+        
+        # Quick check if already tested
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=1.0) as client:
                 response = await client.get(f"{self.base_url}/system_stats")
                 return response.status_code == 200
         except Exception as e:

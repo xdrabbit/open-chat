@@ -142,9 +142,11 @@ Be creative and helpful, but only generate images when they truly add value to t
 You have access to image generation capabilities. If this request would benefit from a visual illustration, you can generate an image by responding in this exact format:
 
 FUNCTION_CALL: generate_image
-ARGUMENTS: {{"prompt": "detailed description of image to generate", "reason": "why this image helps", "style": "artistic"}}
+ARGUMENTS: {{"prompt": "concise, vivid description (MAX 1500 characters)", "reason": "why this image helps", "style": "artistic"}}
 
 Then continue with your normal text response after the function call.
+
+IMPORTANT: Keep image prompts under 1500 characters - be specific but concise. Focus on key visual elements, style, and mood rather than long descriptions.
 
 Only use the function call if the user's request would genuinely benefit from visual content. If it's just a regular question, respond normally without any function call.
 """
@@ -215,6 +217,11 @@ Only use the function call if the user's request would genuinely benefit from vi
                                 function_args["reason"] = "Visual enhancement for the conversation"
                             if "style" not in function_args:
                                 function_args["style"] = "artistic"
+                            
+                            # Enforce 1500 character limit on prompt
+                            if len(function_args["prompt"]) > 1500:
+                                function_args["prompt"] = function_args["prompt"][:1500].rsplit(' ', 1)[0] + "..."
+                                logger.info(f"Truncated image prompt to 1500 characters")
                             
                             return {
                                 "response": '\n'.join(text_response_lines).strip() if text_response_lines else "I'll create an image for you!",
@@ -338,42 +345,38 @@ Only use the function call if the user's request would genuinely benefit from vi
             return False
 
     def _create_image_prompt_from_request(self, message: str) -> Tuple[str, Optional[str]]:
-        """Create a detailed image prompt and detect style from user request"""
+        """Create a concise image prompt and detect style from user request"""
         message_lower = message.lower()
         
         # Detect style preferences from the request
         style = None
         if any(word in message_lower for word in ["realistic", "photorealistic", "real", "photo"]):
             style = "realistic"
-        elif any(word in message_lower for word in ["hyperrealistic", "ultra realistic", "extremely realistic"]):
-            style = "very_realistic"
-        elif any(word in message_lower for word in ["cartoon", "stylized", "character", "semi-realistic"]):
+        elif any(word in message_lower for word in ["cartoon", "stylized", "character"]):
             style = "semi_realistic"
         elif any(word in message_lower for word in ["artistic", "painting", "art", "beautiful"]):
             style = "artistic"
         elif any(word in message_lower for word in ["concept", "fantasy", "sci-fi", "cinematic"]):
             style = "concept_art"
         
-        # Extract key visual elements from the request (simplified now since intelligence handles enhancement)
+        # Create concise prompts for common requests
         if "garden" in message_lower:
-            prompt = "A beautiful, serene garden with colorful flowers, lush greenery, winding paths, and peaceful atmosphere"
+            prompt = "Beautiful garden with colorful flowers, lush greenery, peaceful atmosphere"
         elif "city" in message_lower and ("futuristic" in message_lower or "future" in message_lower):
-            prompt = "A stunning futuristic cityscape with gleaming skyscrapers, flying vehicles, advanced architecture, and vibrant lighting"
+            prompt = "Futuristic cityscape with gleaming skyscrapers, flying vehicles, vibrant lighting"
         elif "horse" in message_lower:
-            prompt = "A majestic white horse galloping freely in a green meadow with dramatic clouds overhead"
-        elif "chariot" in message_lower:
-            prompt = "An ornate golden chariot with intricate details, pulled by powerful horses, set against a dramatic sky with clouds"
+            prompt = "Majestic white horse galloping in green meadow, dramatic clouds"
         elif "music" in message_lower:
-            prompt = "An artistic visualization of music with flowing sound waves, musical notes floating in air, vibrant colors representing harmony and rhythm"
+            prompt = "Artistic visualization of music with flowing sound waves, vibrant colors"
         elif "sunset" in message_lower:
-            prompt = "A breathtaking sunset with vibrant colors painting the sky, golden light reflecting on the landscape"
-        elif "atom" in message_lower and "split" in message_lower:
-            prompt = "A scientific visualization of atomic structure with orbiting electrons, energy particles, and nuclear reactions"
+            prompt = "Breathtaking sunset with vibrant colors, golden light"
         else:
-            # Generic fallback - let the intelligence enhance it
+            # Generic fallback - keep it short
             prompt = message.replace("show me", "").replace("draw", "").replace("create", "").replace("generate", "").strip()
-            if not prompt:
-                prompt = "A beautiful artistic illustration"
+            if not prompt or len(prompt) < 10:
+                prompt = "Beautiful artistic illustration"
+            elif len(prompt) > 200:  # Keep fallback prompts short
+                prompt = prompt[:200].rsplit(' ', 1)[0] + "..."
         
         return prompt, style
     
