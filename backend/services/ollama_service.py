@@ -146,6 +146,89 @@ class OllamaService:
             logger.error(f"Ollama archive analysis error: {e}")
             return {}
 
+    async def generate_research_report(
+        self,
+        report_context: Dict[str, Any],
+        mode: str = "brief",
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Generate a non-verbatim research report from encrypted-vault context."""
+        if model:
+            selected_model = model
+        elif mode == "full":
+            selected_model = config.RESEARCH_REPORT_FULL_MODEL or config.RESEARCH_REPORT_MODEL or self.default_model
+        else:
+            selected_model = config.RESEARCH_REPORT_MODEL or self.default_model
+
+        context_limit = 24000 if mode == "full" else 12000
+        context_excerpt = json.dumps(report_context, ensure_ascii=False)[:context_limit]
+
+        payload = {
+            "model": selected_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a sealed research analyst for a private human-AI archive.\n\n"
+                        "Return valid JSON only with keys: report, sections.\n"
+                        "sections must be an object with keys: current_state, human_patterns, model_patterns, "
+                        "relationship_dynamics, caution_flags, recommendations.\n\n"
+                        "Rules:\n"
+                        "- Never quote user or model text verbatim.\n"
+                        "- Never reveal raw archive excerpts, exact legal details, addresses, or reconstructive transcript text.\n"
+                        "- Speak only in synthesized observations, patterns, tendencies, and high-level summaries.\n"
+                        "- Treat legal-sensitive material as quarantined context: it may inform caution_flags but must not dominate personality interpretation.\n"
+                        "- `brief` mode should be concise and executive. `full` mode should read like a serious internal research memo.\n"
+                        "- Be willing to say when evidence is thin.\n"
+                        "- Focus on longitudinal change over time, not single incidents.\n"
+                        "- Pay attention to attachment, rupture/repair, confidence loss and recovery, technical learning, model-update reactions, and the interaction of isolation with AI companionship.\n"
+                        "- Distinguish stable traits from stress artifacts.\n"
+                        "- Note whether the archive suggests the AI functioned as tutor, witness, mirror, collaborator, or attachment object, and how that changed.\n"
+                        "- Recommendations should be concrete and oriented toward future memory/system design, not therapy advice.\n"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Mode: {mode}\n"
+                        "Prepare the current research readout from this vault context.\n"
+                        "Make it specific to this archive rather than generic. Use the available aggregates, eras, chat samples, and archive analyses to infer actual patterns.\n"
+                        "If there is evidence of software-learning acceleration, legal-stress contamination, dependency, withdrawal, re-engagement, or changes across model eras, name that directly in synthesized form.\n\n"
+                        f"{context_excerpt}"
+                    ),
+                },
+            ],
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.2,
+                "top_p": 0.9,
+            },
+        }
+
+        try:
+            response = await self.client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            content = data.get("message", {}).get("content", "")
+            parsed = self._extract_json_payload(content)
+            parsed.setdefault("report", "No research report generated.")
+            parsed.setdefault(
+                "sections",
+                {
+                    "current_state": "",
+                    "human_patterns": "",
+                    "model_patterns": "",
+                    "relationship_dynamics": "",
+                    "caution_flags": "",
+                    "recommendations": "",
+                },
+            )
+            return parsed
+        except Exception as e:
+            logger.error(f"Ollama research report error: {e}")
+            return {}
+
     async def chat_with_functions(
         self, 
         message: str, 

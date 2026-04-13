@@ -52,6 +52,8 @@ class OpenChat {
         // Conversation controls
         this.loadHistoryBtn = document.getElementById('load-history-btn');
         this.clearHistoryBtn = document.getElementById('clear-history-btn');
+        this.researchBriefBtn = document.getElementById('research-brief-btn');
+        this.researchFullBtn = document.getElementById('research-full-btn');
         this.conversationStats = document.getElementById('conversation-stats');
         
         // Creativity controls
@@ -109,6 +111,8 @@ class OpenChat {
         // Conversation controls
         this.loadHistoryBtn.addEventListener('click', () => this.reloadConversationHistory());
         this.clearHistoryBtn.addEventListener('click', () => this.clearConversationHistory());
+        this.researchBriefBtn.addEventListener('click', () => this.fetchResearchReport('brief'));
+        this.researchFullBtn.addEventListener('click', () => this.fetchResearchReport('full'));
 
         // Creativity controls
         this.creativityToggleBtn.addEventListener('click', () => this.toggleCreativityPanel());
@@ -1266,6 +1270,116 @@ class OpenChat {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    formatSectionLabel(label) {
+        return label.replace(/_/g, ' ');
+    }
+
+    addResearchReport(reportData, mode = 'brief') {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+
+        const reportWrapper = document.createElement('div');
+        reportWrapper.className = 'research-report';
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'research-report-title';
+        titleDiv.textContent = mode === 'full' ? 'Research Full Report' : 'Research Brief';
+        reportWrapper.appendChild(titleDiv);
+
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'research-report-body';
+        bodyDiv.textContent = reportData.report || 'No research report returned.';
+        reportWrapper.appendChild(bodyDiv);
+
+        const sections = reportData.sections || {};
+        const sectionEntries = Object.entries(sections).filter(([, value]) => {
+            if (value === null || value === undefined) return false;
+            if (Array.isArray(value)) return value.length > 0;
+            return String(value).trim().length > 0;
+        });
+
+        if (sectionEntries.length > 0) {
+            const sectionsDiv = document.createElement('div');
+            sectionsDiv.className = 'research-report-sections';
+
+            sectionEntries.forEach(([label, value]) => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'research-report-section';
+
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'research-report-section-label';
+                labelDiv.textContent = this.formatSectionLabel(label);
+                sectionDiv.appendChild(labelDiv);
+
+                const textDiv = document.createElement('div');
+                textDiv.className = 'research-report-section-text';
+                textDiv.textContent = Array.isArray(value) ? value.join(' | ') : String(value);
+                sectionDiv.appendChild(textDiv);
+
+                sectionsDiv.appendChild(sectionDiv);
+            });
+
+            reportWrapper.appendChild(sectionsDiv);
+        }
+
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'message-meta';
+        const stats = reportData.stats || {};
+        const timestampSpan = document.createElement('span');
+        timestampSpan.textContent = new Date(reportData.generated_at || Date.now()).toLocaleTimeString();
+        metaDiv.appendChild(timestampSpan);
+
+        const statsSpan = document.createElement('span');
+        const totalEntries = stats.total_entries ?? 0;
+        const archiveEntries = stats.archive_entries ?? 0;
+        const chatEntries = stats.chat_entries ?? 0;
+        statsSpan.textContent = `Vault: ${totalEntries} entries (${archiveEntries} archive, ${chatEntries} chat)`;
+        metaDiv.appendChild(statsSpan);
+
+        contentDiv.appendChild(reportWrapper);
+        contentDiv.appendChild(metaDiv);
+        messageDiv.appendChild(contentDiv);
+        this.messagesContainer.appendChild(messageDiv);
+        this.scrollToBottom();
+    }
+
+    async fetchResearchReport(mode = 'brief') {
+        const button = mode === 'full' ? this.researchFullBtn : this.researchBriefBtn;
+        const originalLabel = button.textContent;
+        button.disabled = true;
+        button.textContent = mode === 'full' ? 'Loading Full' : 'Loading Brief';
+
+        try {
+            const endpoint = mode === 'full'
+                ? `${this.apiBase}/research-vault/full-report`
+                : `${this.apiBase}/research-vault/brief`;
+            const response = await fetch(endpoint);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+            this.addResearchReport(data, mode);
+        } catch (error) {
+            console.error('Research report error:', error);
+            this.addMessage(
+                `Research report failed: ${error.message}`,
+                'assistant',
+                null,
+                null,
+                true
+            );
+        } finally {
+            button.disabled = false;
+            button.textContent = originalLabel;
+        }
     }
 
     // Creativity controls methods

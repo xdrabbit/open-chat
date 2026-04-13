@@ -31,6 +31,8 @@ class Config:
     # Ollama Configuration
     OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+    RESEARCH_REPORT_MODEL = os.getenv("RESEARCH_REPORT_MODEL", "qwen2.5:14b")
+    RESEARCH_REPORT_FULL_MODEL = os.getenv("RESEARCH_REPORT_FULL_MODEL", "qwen3.5:27b")
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     EMBEDDING_LOCAL_ONLY = os.getenv("EMBEDDING_LOCAL_ONLY", "False").lower() == "true"
 

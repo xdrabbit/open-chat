@@ -61,3 +61,10 @@ class HealthResponse(BaseModel):
     ollama_connected: bool
     tts_provider: str
     services: List[str]
+
+class ResearchVaultReportResponse(BaseModel):
+    mode: str
+    generated_at: datetime
+    stats: Dict[str, Any]
+    report: str
+    sections: Dict[str, Any]

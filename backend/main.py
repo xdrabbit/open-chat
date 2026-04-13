@@ -892,6 +892,72 @@ async def get_research_vault_stats():
         logger.error(f"Error getting research vault stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/research-vault/report", response_model=ResearchVaultReportResponse)
+async def get_research_vault_report(mode: str = "brief", limit: int = 0):
+    """Return a synthesized research readout without exposing raw vault entries."""
+    try:
+        normalized_mode = mode.lower().strip()
+        if normalized_mode not in {"brief", "full"}:
+            raise HTTPException(status_code=400, detail="mode must be 'brief' or 'full'")
+
+        effective_limit = limit
+        if effective_limit <= 0:
+            effective_limit = 24 if normalized_mode == "brief" else 72
+
+        report_context = research_vault_service.build_report_context(limit=max(1, min(effective_limit, 240)))
+        stats = report_context.get("stats", {})
+
+        if not report_context.get("enabled", False):
+            return ResearchVaultReportResponse(
+                mode=normalized_mode,
+                generated_at=datetime.now(),
+                stats=stats,
+                report="Research vault is disabled.",
+                sections={"current_state": "Research vault is disabled."},
+            )
+
+        if report_context.get("entries_considered", 0) == 0:
+            return ResearchVaultReportResponse(
+                mode=normalized_mode,
+                generated_at=datetime.now(),
+                stats=stats,
+                report="Research vault is empty. No findings yet.",
+                sections={"current_state": "Research vault is empty. No findings yet."},
+            )
+
+        report_payload = {}
+        if await ollama_service.health_check():
+            report_payload = await ollama_service.generate_research_report(
+                report_context,
+                mode=normalized_mode,
+            )
+
+        if not report_payload:
+            report_payload = research_vault_service.build_report_fallback(report_context, normalized_mode)
+
+        return ResearchVaultReportResponse(
+            mode=normalized_mode,
+            generated_at=datetime.now(),
+            stats=stats,
+            report=report_payload.get("report", "No research report generated."),
+            sections=report_payload.get("sections", {"current_state": "No research report generated."}),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating research vault report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/research-vault/brief", response_model=ResearchVaultReportResponse)
+async def get_research_vault_brief(limit: int = 24):
+    """Convenience endpoint for a brief research readout."""
+    return await get_research_vault_report(mode="brief", limit=limit)
+
+@app.get("/research-vault/full-report", response_model=ResearchVaultReportResponse)
+async def get_research_vault_full_report(limit: int = 72):
+    """Convenience endpoint for a fuller research readout."""
+    return await get_research_vault_report(mode="full", limit=limit)
+
 @app.delete("/research-vault")
 async def wipe_research_vault():
     """Delete the entire encrypted research vault."""

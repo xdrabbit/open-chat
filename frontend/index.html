@@ -102,6 +102,7 @@
         .conversation-controls {
             display: flex;
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .creativity-panel {
@@ -218,6 +219,16 @@
         .control-button.danger:hover {
             background: rgba(143, 69, 65, 0.2);
             border-color: rgba(143, 69, 65, 0.48);
+        }
+
+        .control-button.report {
+            border-color: rgba(142, 120, 81, 0.26);
+            color: #f0e5d0;
+        }
+
+        .control-button.report:hover {
+            background: rgba(142, 120, 81, 0.14);
+            border-color: rgba(142, 120, 81, 0.4);
         }
 
         .stats-info {
@@ -793,6 +804,48 @@
             border-color: rgba(39, 49, 58, 0.2);
         }
 
+        .research-report {
+            display: grid;
+            gap: 0.85rem;
+        }
+
+        .research-report-title {
+            font-size: 0.74rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent-warm-strong);
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+        }
+
+        .research-report-body {
+            line-height: 1.6;
+        }
+
+        .research-report-sections {
+            display: grid;
+            gap: 0.6rem;
+        }
+
+        .research-report-section {
+            padding: 0.75rem 0.8rem;
+            border: 1px solid rgba(89, 103, 117, 0.12);
+            border-radius: var(--radius-sm);
+            background: rgba(89, 103, 117, 0.05);
+        }
+
+        .research-report-section-label {
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-soft);
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+            margin-bottom: 0.35rem;
+        }
+
+        .research-report-section-text {
+            line-height: 1.55;
+        }
+
         .rag-sources {
             margin-top: 0.85rem;
             padding-top: 0.85rem;
@@ -1176,6 +1229,12 @@
                 </button>
                 <button class="control-button danger" id="clear-history-btn" title="Clear all conversation history">
                     Clear Log
+                </button>
+                <button class="control-button report" id="research-brief-btn" title="Request the current research brief">
+                    Research Brief
+                </button>
+                <button class="control-button report" id="research-full-btn" title="Request the current full research report">
+                    Full Report
                 </button>
                 <button class="control-button" id="creativity-toggle-btn" title="Toggle AI creativity controls">
                     Model Controls
