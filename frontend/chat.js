@@ -501,7 +501,7 @@ class OpenChat {
             this.mediaRecorder.stop();
             this.isRecording = false;
             this.micBtn.classList.remove('recording');
-            this.micBtn.title = 'Click to speak';
+            this.micBtn.title = 'Speech input';
         }
     }
 
@@ -620,14 +620,14 @@ class OpenChat {
                 
                 const playBtn = document.createElement('button');
                 playBtn.className = 'play-btn';
-                playBtn.innerHTML = '🔊';
+                playBtn.innerHTML = 'Play';
                 playBtn.title = 'Play audio';
                 playBtn.dataset.audioFile = audioFile;
                 playBtn.onclick = (e) => this.toggleAudio(audioFile, e.target);
                 
                 const stopBtn = document.createElement('button');
                 stopBtn.className = 'stop-btn';
-                stopBtn.innerHTML = '⏹️';
+                stopBtn.innerHTML = 'Stop';
                 stopBtn.title = 'Stop audio';
                 stopBtn.style.display = 'none';
                 stopBtn.onclick = () => this.stopAudio();
@@ -676,7 +676,7 @@ class OpenChat {
             
             // Update button state
             if (buttonElement) {
-                buttonElement.innerHTML = '⏸️';
+                buttonElement.innerHTML = 'Pause';
                 buttonElement.title = 'Pause audio';
                 
                 // Show stop button
@@ -716,7 +716,7 @@ class OpenChat {
 
     resetAudioControls() {
         if (this.currentPlayButton) {
-            this.currentPlayButton.innerHTML = '🔊';
+            this.currentPlayButton.innerHTML = 'Play';
             this.currentPlayButton.title = 'Play audio';
             
             // Hide stop button
@@ -744,7 +744,7 @@ class OpenChat {
             
             const loadingContent = document.createElement('div');
             loadingContent.className = 'loading';
-            loadingContent.innerHTML = '<div class="spinner"></div> Thinking...';
+            loadingContent.innerHTML = '<div class="spinner"></div> Processing...';
             
             contentDiv.appendChild(loadingContent);
             loadingDiv.appendChild(contentDiv);
@@ -783,23 +783,23 @@ class OpenChat {
 
     async reloadConversationHistory() {
         this.loadHistoryBtn.disabled = true;
-        this.loadHistoryBtn.textContent = '🔄 Loading...';
+        this.loadHistoryBtn.textContent = 'Loading';
         
         try {
             await this.loadConversationHistory();
             await this.loadConversationStats();
             
             // Show success feedback
-            this.loadHistoryBtn.textContent = '✅ Reloaded';
+            this.loadHistoryBtn.textContent = 'Reloaded';
             setTimeout(() => {
-                this.loadHistoryBtn.textContent = '🔄 Reload History';
+                this.loadHistoryBtn.textContent = 'Reload';
                 this.loadHistoryBtn.disabled = false;
             }, 2000);
             
         } catch (error) {
             console.error('Failed to reload conversation history:', error);
             alert('Failed to reload conversation history');
-            this.loadHistoryBtn.textContent = '🔄 Reload History';
+            this.loadHistoryBtn.textContent = 'Reload';
             this.loadHistoryBtn.disabled = false;
         }
     }
@@ -812,7 +812,7 @@ class OpenChat {
         if (!confirmed) return;
         
         this.clearHistoryBtn.disabled = true;
-        this.clearHistoryBtn.textContent = '🗑️ Clearing...';
+        this.clearHistoryBtn.textContent = 'Clearing';
         
         try {
             const response = await fetch(`${this.apiBase}/conversations`, {
@@ -834,16 +834,16 @@ class OpenChat {
             await this.loadConversationStats();
             
             // Show success feedback
-            this.clearHistoryBtn.textContent = '✅ Cleared';
+            this.clearHistoryBtn.textContent = 'Cleared';
             setTimeout(() => {
-                this.clearHistoryBtn.textContent = '🗑️ Clear History';
+                this.clearHistoryBtn.textContent = 'Clear Log';
                 this.clearHistoryBtn.disabled = false;
             }, 2000);
             
         } catch (error) {
             console.error('Failed to clear conversation history:', error);
             alert('Failed to clear conversation history');
-            this.clearHistoryBtn.textContent = '🗑️ Clear History';
+            this.clearHistoryBtn.textContent = 'Clear Log';
             this.clearHistoryBtn.disabled = false;
         }
     }
@@ -939,10 +939,10 @@ class OpenChat {
         const result = await response.json();
         
         // Add system message about upload
-        let uploadMessage = `📚 Document "${file.name}" has been added to my knowledge base. I can now answer questions based on its content!`;
+        let uploadMessage = `Document "${file.name}" has been added to the knowledge base and is available for retrieval.`;
 
         if (result.imported_threads) {
-            uploadMessage = `📚 Imported ${result.imported_threads} ChatGPT conversation thread${result.imported_threads === 1 ? '' : 's'} from "${file.name}".`;
+            uploadMessage = `Imported ${result.imported_threads} ChatGPT conversation thread${result.imported_threads === 1 ? '' : 's'} from "${file.name}".`;
             if (result.personality_memories_created) {
                 uploadMessage += ` ${result.personality_memories_created} thread${result.personality_memories_created === 1 ? '' : 's'} contributed distilled personality memory.`;
             }
@@ -959,16 +959,16 @@ class OpenChat {
                 uploadMessage += ` ${result.retention_counts.exact_reference} thread${result.retention_counts.exact_reference === 1 ? '' : 's'} were kept for exact reference.`;
             }
         } else if (result.skipped_duplicate) {
-            uploadMessage = `📚 Document "${file.name}" matches an existing import and was skipped as a duplicate.`;
+            uploadMessage = `Document "${file.name}" matches an existing import and was skipped as a duplicate.`;
         } else if (result.personality_memory_created) {
-            uploadMessage = `📚 Document "${file.name}" was indexed as ${result.archive_type || 'archive material'} and distilled into background personality memory without retaining raw text for retrieval.`;
+            uploadMessage = `Document "${file.name}" was indexed as ${result.archive_type || 'archive material'} and distilled into background personality memory without retaining raw text for retrieval.`;
         } else if (result.legal_sensitivity) {
-            uploadMessage = `📚 Document "${file.name}" was indexed as ${result.archive_type || 'reference material'} and quarantined to exact reference memory so it does not color personality.`;
+            uploadMessage = `Document "${file.name}" was indexed as ${result.archive_type || 'reference material'} and quarantined to exact reference memory so it does not color personality.`;
         } else if (result.archive_document_created) {
             const retentionText = result.retention_mode === 'distill_only'
                 ? ' as distill-only memory'
                 : ' for exact reference';
-            uploadMessage = `📚 Document "${file.name}" was indexed as ${result.archive_type || 'reference material'}${result.era_label ? ` in era "${result.era_label}"` : ''}${retentionText}.`;
+            uploadMessage = `Document "${file.name}" was indexed as ${result.archive_type || 'reference material'}${result.era_label ? ` in era "${result.era_label}"` : ''}${retentionText}.`;
         }
 
         if (result.formative_moments_created) {
@@ -1047,7 +1047,7 @@ class OpenChat {
         
         if (supportsVision) {
             this.imageBtn.disabled = false;
-            this.imageBtn.title = 'Upload image for AI analysis';
+            this.imageBtn.title = 'Attach image for analysis';
         } else {
             this.imageBtn.disabled = true;
             this.imageBtn.title = 'Select a vision model to upload images';
@@ -1189,14 +1189,14 @@ class OpenChat {
         
         messageDiv.innerHTML = `
             <div class="message-content">
-                <div class="message-text">🎨 Generated image: "${prompt}"</div>
+                <div class="message-text">Rendered image: "${prompt}"</div>
                 <div class="message-image">
                     <img src="${this.apiBase}/images/${imageFilename}" alt="Generated image" style="max-width: 400px; border-radius: 8px; margin-top: 0.5rem;">
                 </div>
                 <div class="message-timestamp">${timestamp}</div>
                 <div class="message-actions">
                     <button class="action-btn" onclick="this.downloadImage('${imageFilename}')">
-                        💾 Download
+                        Download
                     </button>
                 </div>
             </div>
@@ -1225,7 +1225,7 @@ class OpenChat {
         
         messageDiv.innerHTML = `
             <div class="message-header">
-                <span class="message-role">🤖 AI Generated Image</span>
+                <span class="message-role">Generated Image</span>
                 <span class="message-time">${timestamp}</span>
             </div>
             <div class="message-content">
@@ -1246,10 +1246,10 @@ class OpenChat {
                 </div>
                 <div class="message-actions">
                     <button class="action-btn" onclick="window.openChat.downloadGeneratedImage('${generatedImage.url}')">
-                        💾 Download
+                        Download
                     </button>
                     <button class="action-btn" onclick="navigator.clipboard.writeText('${generatedImage.prompt}')">
-                        📋 Copy Prompt
+                        Copy Prompt
                     </button>
                 </div>
             </div>

@@ -5,6 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open Chat - Local AI Voice Chat</title>
     <style>
+        :root {
+            --bg: #d7d9dc;
+            --bg-panel: rgba(242, 241, 237, 0.94);
+            --bg-panel-strong: rgba(249, 248, 244, 0.98);
+            --bg-dark: #13171c;
+            --bg-dark-soft: #1b2128;
+            --bg-dark-elevated: #252d35;
+            --line: rgba(19, 23, 28, 0.12);
+            --line-strong: rgba(19, 23, 28, 0.22);
+            --line-accent: rgba(142, 120, 81, 0.28);
+            --text: #161a1f;
+            --text-soft: #606872;
+            --text-inverse: #f4f1ea;
+            --accent: #596775;
+            --accent-strong: #27313a;
+            --accent-warm: #8e7851;
+            --accent-warm-strong: #6f5c3d;
+            --success: #395d4d;
+            --danger: #8f4541;
+            --shadow-lg: 0 24px 54px rgba(12, 16, 20, 0.12);
+            --shadow-md: 0 12px 28px rgba(12, 16, 20, 0.08);
+            --radius-lg: 12px;
+            --radius-md: 8px;
+            --radius-sm: 4px;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,23 +38,43 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: "IBM Plex Sans", "Aptos", "Source Sans 3", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.06)),
+                linear-gradient(125deg, #dadbdd 0%, #c3c7cc 44%, #b8bec5 100%);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(34, 40, 47, 0.032) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(34, 40, 47, 0.032) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+            background-size: 36px 36px, 36px 36px, 100% 100%;
+            opacity: 0.7;
+        }
+
         .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            background:
+                linear-gradient(180deg, rgba(24, 29, 35, 0.98), rgba(16, 20, 24, 0.96));
+            backdrop-filter: blur(14px);
+            padding: 1.1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 1rem;
+            box-shadow: 0 14px 32px rgba(9, 11, 14, 0.18);
+            position: relative;
+            z-index: 2;
         }
 
         .header-left {
@@ -44,9 +90,12 @@
         }
 
         .header h1 {
-            color: white;
-            font-size: 1.8rem;
-            font-weight: 300;
+            color: var(--text-inverse);
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+            font-size: 1.55rem;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
             margin: 0;
         }
 
@@ -56,15 +105,15 @@
         }
 
         .creativity-panel {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            background: rgba(248, 247, 243, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: var(--radius-md);
             padding: 1rem;
             margin-top: 0.5rem;
             opacity: 0;
             max-height: 0;
             overflow: hidden;
-            transition: all 0.3s ease;
+            transition: all 0.25s ease;
         }
 
         .creativity-panel.show {
@@ -80,25 +129,27 @@
         }
 
         .creativity-title {
-            color: white;
-            font-size: 0.9rem;
-            font-weight: 500;
+            color: var(--text-inverse);
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
             margin: 0;
         }
 
         .creativity-toggle {
-            background: none;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            border-radius: 3px;
-            padding: 0.25rem 0.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: var(--text-inverse);
+            border-radius: var(--radius-sm);
+            padding: 0.3rem 0.65rem;
             font-size: 0.7rem;
             cursor: pointer;
             transition: all 0.2s;
         }
 
         .creativity-toggle:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .creativity-controls {
@@ -114,28 +165,30 @@
         }
 
         .creativity-label {
-            color: rgba(255, 255, 255, 0.8);
+            color: rgba(243, 241, 235, 0.72);
             font-size: 0.75rem;
             font-weight: 500;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .creativity-slider {
             width: 100%;
-            height: 4px;
+            height: 3px;
             border-radius: 2px;
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.16);
             outline: none;
             appearance: none;
         }
 
         .creativity-slider::-webkit-slider-thumb {
             appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: #667eea;
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            background: var(--accent-warm);
             cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.26);
         }
 
         .creativity-value {
@@ -145,38 +198,55 @@
         }
 
         .control-button {
-            padding: 0.5rem 1rem;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border-radius: 5px;
+            padding: 0.55rem 0.95rem;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-inverse);
+            border-radius: var(--radius-sm);
             cursor: pointer;
             font-size: 0.8rem;
             transition: all 0.2s;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .control-button:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.34);
         }
 
         .control-button.danger:hover {
-            background: rgba(244, 67, 54, 0.3);
-            border-color: rgba(244, 67, 54, 0.7);
+            background: rgba(143, 69, 65, 0.2);
+            border-color: rgba(143, 69, 65, 0.48);
         }
 
         .stats-info {
             font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.7);
+            color: rgba(243, 241, 235, 0.62);
             margin-top: 0.25rem;
         }
 
         .rag-section {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: var(--bg-panel);
+            border-radius: var(--radius-lg);
             padding: 1.5rem;
             margin-bottom: 1.5rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.38);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rag-section::before,
+        .messages-container::before,
+        .input-container::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, rgba(39, 49, 58, 0.88), rgba(142, 120, 81, 0.5), rgba(39, 49, 58, 0.18));
         }
 
         .rag-header {
@@ -184,28 +254,34 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1rem;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 0.75rem;
         }
 
         .rag-title {
             font-size: 1.2rem;
             font-weight: 600;
-            color: #333;
+            color: var(--text);
             margin: 0;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
         }
 
         .rag-status {
             font-size: 0.8rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-            background: #f1f3f4;
-            color: #666;
+            padding: 0.32rem 0.65rem;
+            border-radius: 999px;
+            background: rgba(89, 103, 117, 0.08);
+            color: var(--text-soft);
+            border: 1px solid rgba(89, 103, 117, 0.14);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .rag-status.enabled {
-            background: #e8f5e8;
-            color: #2e7d32;
+            background: rgba(57, 93, 77, 0.1);
+            color: var(--success);
+            border-color: rgba(57, 93, 77, 0.18);
         }
 
         .rag-content {
@@ -227,13 +303,14 @@
         }
 
         .file-drop-zone {
-            border: 2px dashed #ccc;
-            border-radius: 10px;
+            border: 1px dashed rgba(39, 49, 58, 0.26);
+            border-radius: var(--radius-md);
             padding: 2rem;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: #fafafa;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(239, 237, 231, 0.88));
             flex: 1;
             min-height: 100px;
             display: flex;
@@ -244,13 +321,13 @@
         }
 
         .file-drop-zone:hover {
-            border-color: #667eea;
-            background: #f0f4ff;
+            border-color: rgba(39, 49, 58, 0.44);
+            background: rgba(249, 248, 244, 0.92);
         }
 
         .file-drop-zone.drag-over {
-            border-color: #667eea;
-            background: #e3f2fd;
+            border-color: var(--accent-warm);
+            background: rgba(142, 120, 81, 0.08);
             border-style: solid;
         }
 
@@ -261,28 +338,32 @@
 
         .file-drop-zone .drop-text {
             font-size: 1rem;
-            color: #666;
+            color: var(--text-soft);
             margin-bottom: 0.5rem;
         }
 
         .file-drop-zone .drop-hint {
             font-size: 0.8rem;
-            color: #999;
+            color: rgba(95, 103, 114, 0.82);
         }
 
         .file-button {
-            padding: 0.5rem 1rem;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
+            padding: 0.65rem 1.1rem;
+            background: var(--accent-strong);
+            color: var(--text-inverse);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            font-size: 0.9rem;
-            transition: background 0.2s;
+            font-size: 0.82rem;
+            transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 0 8px 18px rgba(17, 22, 27, 0.12);
         }
 
         .file-button:hover {
-            background: #5a6fd8;
+            background: #1d252d;
+            transform: translateY(-1px);
         }
 
         .file-button:disabled {
@@ -293,7 +374,7 @@
         .upload-progress {
             width: 100%;
             height: 4px;
-            background: #e0e0e0;
+            background: rgba(81, 96, 111, 0.14);
             border-radius: 2px;
             overflow: hidden;
             margin-top: 0.5rem;
@@ -302,25 +383,36 @@
 
         .upload-progress-bar {
             height: 100%;
-            background: #667eea;
+            background: linear-gradient(90deg, var(--accent-strong), var(--accent-warm));
             transition: width 0.3s ease;
             width: 0%;
         }
 
         .rag-stats {
             font-size: 0.8rem;
-            color: #666;
+            color: var(--text-soft);
             margin-left: auto;
         }
 
         /* ComfyUI Section Styles */
         .comfyui-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 15px;
+            background:
+                linear-gradient(180deg, rgba(26, 31, 37, 0.98), rgba(17, 21, 26, 0.97));
+            border-radius: var(--radius-lg);
             padding: 1.5rem;
             margin-bottom: 2rem;
-            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 42px rgba(12, 15, 19, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .comfyui-section::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(90deg, rgba(142, 120, 81, 0.9), rgba(255, 255, 255, 0.08));
         }
 
         .comfyui-header {
@@ -333,22 +425,26 @@
         .comfyui-title {
             font-size: 1.2rem;
             font-weight: 600;
-            color: white;
+            color: var(--text-inverse);
             margin: 0;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .comfyui-status {
             font-size: 0.8rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
+            padding: 0.32rem 0.65rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-inverse);
             backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .comfyui-status.connected {
-            background: rgba(76, 175, 80, 0.8);
+            background: rgba(57, 93, 77, 0.68);
         }
 
         .comfyui-content {
@@ -371,14 +467,14 @@
 
         .image-prompt, .negative-prompt {
             padding: 0.75rem;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-inverse);
             font-family: inherit;
             font-size: 0.9rem;
             resize: vertical;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(8px);
         }
 
         .image-prompt::placeholder, .negative-prompt::placeholder {
@@ -387,8 +483,8 @@
 
         .image-prompt:focus, .negative-prompt:focus {
             outline: none;
-            border-color: rgba(255, 255, 255, 0.6);
-            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(142, 120, 81, 0.55);
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .generation-params {
@@ -407,16 +503,18 @@
 
         .param-group label {
             font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.9);
+            color: rgba(243, 241, 235, 0.9);
             font-weight: 500;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .param-group select {
             padding: 0.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-inverse);
             backdrop-filter: blur(10px);
             font-size: 0.85rem;
         }
@@ -432,23 +530,25 @@
         }
 
         .generate-btn {
-            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-            color: white;
-            border: none;
+            background: linear-gradient(135deg, #8e7851, #6f5c3d);
+            color: #f9f7f1;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             padding: 0.75rem 2rem;
-            border-radius: 25px;
+            border-radius: 999px;
             cursor: pointer;
-            font-size: 1rem;
+            font-size: 0.92rem;
             font-weight: 600;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(238, 90, 36, 0.4);
+            box-shadow: 0 10px 22px rgba(77, 61, 36, 0.22);
             position: relative;
             min-width: 160px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .generate-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(238, 90, 36, 0.6);
+            box-shadow: 0 14px 28px rgba(77, 61, 36, 0.3);
         }
 
         .generate-btn:disabled {
@@ -465,10 +565,11 @@
         }
 
         .generation-progress {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: var(--radius-md);
             padding: 1rem;
             backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .progress-bar {
@@ -482,7 +583,7 @@
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #81C784);
+            background: linear-gradient(90deg, var(--accent-strong), var(--accent-warm));
             border-radius: 4px;
             transition: width 0.3s ease;
             width: 0%;
@@ -503,46 +604,54 @@
             display: flex;
             gap: 1rem;
             margin-top: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .status-item {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.9rem;
+            color: rgba(243, 241, 235, 0.82);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
         }
 
         .status-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #4CAF50;
+            background: var(--success);
         }
 
         .status-dot.error {
-            background: #f44336;
+            background: var(--danger);
         }
 
         .chat-container {
             flex: 1;
             display: flex;
             flex-direction: column;
-            max-width: 800px;
+            max-width: 1240px;
             margin: 0 auto;
             width: 100%;
             padding: 2rem;
+            position: relative;
+            z-index: 1;
         }
 
         .messages-container {
             flex: 1;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: var(--bg-panel-strong);
+            border-radius: var(--radius-lg);
             padding: 1.5rem;
             margin-bottom: 1.5rem;
             overflow-y: auto;
             max-height: 500px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.42);
+            position: relative;
         }
 
         .message {
@@ -557,38 +666,42 @@
 
         .message-content {
             max-width: 70%;
-            padding: 1rem 1.5rem;
-            border-radius: 20px;
+            padding: 1rem 1.25rem;
+            border-radius: 18px;
             position: relative;
         }
 
         .message.user .message-content {
-            background: #667eea;
-            color: white;
-            border-bottom-right-radius: 5px;
+            background: linear-gradient(180deg, #27313a, #1c252d);
+            color: var(--text-inverse);
+            border-bottom-right-radius: 2px;
+            box-shadow: 0 10px 24px rgba(19, 24, 29, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.04);
         }
 
         .message.assistant .message-content {
-            background: #f1f3f4;
-            color: #333;
-            border-bottom-left-radius: 5px;
+            background: #f1efe9;
+            color: var(--text);
+            border-bottom-left-radius: 2px;
+            border: 1px solid rgba(26, 29, 33, 0.08);
         }
 
         .message.ai-generated {
-            border-left: 4px solid #667eea;
+            border-left: 4px solid var(--accent-warm);
         }
 
         .message.ai-generated .message-content {
-            background: linear-gradient(135deg, #f8f9ff 0%, #f1f3ff 100%);
-            border: 1px solid #e0e4ff;
+            background: linear-gradient(135deg, #f8f5ee 0%, #f0e8da 100%);
+            border: 1px solid rgba(142, 120, 81, 0.18);
         }
 
         .ai-image-info {
-            background: rgba(102, 126, 234, 0.1);
+            background: rgba(142, 120, 81, 0.08);
             padding: 0.75rem;
-            border-radius: 6px;
+            border-radius: var(--radius-sm);
             margin-bottom: 1rem;
             font-size: 0.85rem;
+            border: 1px solid rgba(142, 120, 81, 0.14);
         }
 
         .ai-image-info > div {
@@ -607,10 +720,11 @@
         .generated-image {
             max-width: 100%;
             max-height: 400px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-md);
             cursor: pointer;
             transition: transform 0.2s;
+            border: 1px solid rgba(19, 23, 28, 0.12);
         }
 
         .generated-image:hover {
@@ -623,13 +737,66 @@
             gap: 0.5rem;
             margin-top: 0.5rem;
             font-size: 0.8rem;
-            opacity: 0.7;
+            opacity: 0.68;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 0.75rem;
+            margin-bottom: 0.55rem;
+        }
+
+        .message-role {
+            font-size: 0.72rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent-strong);
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+        }
+
+        .message-time,
+        .message-timestamp {
+            font-size: 0.74rem;
+            color: var(--text-soft);
+            letter-spacing: 0.03em;
+        }
+
+        .message-text {
+            line-height: 1.55;
+        }
+
+        .message-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.85rem;
+        }
+
+        .action-btn {
+            padding: 0.5rem 0.8rem;
+            border: 1px solid rgba(19, 23, 28, 0.12);
+            background: rgba(255, 255, 255, 0.62);
+            color: var(--accent-strong);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: rgba(39, 49, 58, 0.08);
+            border-color: rgba(39, 49, 58, 0.2);
         }
 
         .rag-sources {
             margin-top: 0.85rem;
             padding-top: 0.85rem;
-            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            border-top: 1px solid rgba(23, 26, 31, 0.1);
             display: grid;
             gap: 0.6rem;
         }
@@ -637,15 +804,15 @@
         .rag-sources-label {
             font-size: 0.78rem;
             font-weight: 700;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
-            opacity: 0.7;
+            color: var(--text-soft);
         }
 
         .rag-source-card {
-            background: rgba(102, 126, 234, 0.08);
-            border: 1px solid rgba(102, 126, 234, 0.14);
-            border-radius: 10px;
+            background: rgba(89, 103, 117, 0.05);
+            border: 1px solid rgba(89, 103, 117, 0.12);
+            border-radius: var(--radius-sm);
             padding: 0.7rem 0.8rem;
         }
 
@@ -687,7 +854,7 @@
         }
 
         .play-btn:hover, .stop-btn:hover {
-            background: rgba(0, 0, 0, 0.1);
+            background: rgba(0, 0, 0, 0.06);
         }
 
         .stop-btn {
@@ -699,10 +866,12 @@
         }
 
         .input-container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: var(--bg-panel-strong);
+            border-radius: var(--radius-lg);
             padding: 1.5rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.42);
+            position: relative;
         }
 
         .input-row {
@@ -733,8 +902,8 @@
         .image-preview {
             max-width: 100px;
             max-height: 100px;
-            border-radius: 8px;
-            border: 2px solid #e0e0e0;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(23, 26, 31, 0.12);
             object-fit: cover;
             cursor: pointer;
         }
@@ -752,8 +921,8 @@
             position: absolute;
             top: -8px;
             right: -8px;
-            background: #f44336;
-            color: white;
+            background: var(--danger);
+            color: var(--text-inverse);
             border: none;
             border-radius: 50%;
             width: 20px;
@@ -767,20 +936,21 @@
 
         .vision-indicator {
             font-size: 0.8rem;
-            color: #667eea;
-            background: rgba(102, 126, 234, 0.1);
+            color: var(--accent-strong);
+            background: rgba(89, 103, 117, 0.08);
             padding: 0.2rem 0.5rem;
             border-radius: 12px;
             margin-left: 0.5rem;
+            border: 1px solid rgba(89, 103, 117, 0.12);
         }
 
         .message-image {
             max-width: 300px;
             max-height: 300px;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             margin: 0.5rem 0;
             cursor: pointer;
-            border: 1px solid #e0e0e0;
+            border: 1px solid rgba(23, 26, 31, 0.1);
         }
 
         .message-image:hover {
@@ -790,37 +960,49 @@
         .text-input {
             flex: 1;
             padding: 1rem 1.5rem;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
+            border: 1px solid rgba(23, 26, 31, 0.14);
+            border-radius: 999px;
             font-size: 1rem;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--text);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
         }
 
         .text-input:focus {
-            border-color: #667eea;
+            border-color: rgba(89, 103, 117, 0.34);
+            box-shadow: 0 0 0 4px rgba(89, 103, 117, 0.07);
+            background: rgba(255, 255, 255, 0.94);
         }
 
         .control-btn {
-            padding: 1rem;
-            border: none;
-            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            padding: 0;
+            border: 1px solid rgba(19, 23, 28, 0.1);
+            border-radius: 14px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.2s;
-            font-size: 1.2rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+            box-shadow: 0 8px 18px rgba(15, 19, 24, 0.08);
         }
 
         .send-btn {
-            background: #667eea;
-            color: white;
+            background: var(--accent-strong);
+            color: var(--text-inverse);
         }
 
         .send-btn:hover {
-            background: #5a6fd8;
-            transform: scale(1.05);
+            background: #1d252d;
+            transform: translateY(-1px);
         }
 
         .send-btn:disabled {
@@ -830,28 +1012,28 @@
         }
 
         .mic-btn {
-            background: #4CAF50;
-            color: white;
+            background: var(--success);
+            color: var(--text-inverse);
         }
 
         .mic-btn:hover {
-            background: #45a049;
-            transform: scale(1.05);
+            background: #2f5041;
+            transform: translateY(-1px);
         }
 
         .mic-btn.recording {
-            background: #f44336;
+            background: var(--danger);
             animation: pulse 1s infinite;
         }
 
         .image-btn {
-            background: #FF9800;
-            color: white;
+            background: var(--accent-warm);
+            color: #f9f7f1;
         }
 
         .image-btn:hover {
-            background: #F57C00;
-            transform: scale(1.05);
+            background: var(--accent-warm-strong);
+            transform: translateY(-1px);
         }
 
         .image-btn:disabled {
@@ -870,15 +1052,15 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            color: #666;
+            color: var(--text-soft);
             font-style: italic;
         }
 
         .spinner {
             width: 16px;
             height: 16px;
-            border: 2px solid #e0e0e0;
-            border-top: 2px solid #667eea;
+            border: 2px solid rgba(89, 103, 117, 0.15);
+            border-top: 2px solid var(--accent-strong);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -889,9 +1071,9 @@
         }
 
         .error {
-            background: #ffebee !important;
-            color: #c62828 !important;
-            border: 1px solid #ffcdd2;
+            background: rgba(158, 66, 63, 0.08) !important;
+            color: #7d2e2c !important;
+            border: 1px solid rgba(158, 66, 63, 0.18);
         }
 
         .settings {
@@ -900,15 +1082,16 @@
             gap: 1rem;
             align-items: center;
             font-size: 0.9rem;
-            color: #666;
+            color: var(--text-soft);
             flex-wrap: wrap;
         }
 
         .settings select {
             padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background: white;
+            border: 1px solid rgba(23, 26, 31, 0.14);
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.86);
+            color: var(--text);
             max-width: 150px;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -970,15 +1153,15 @@
             <div class="status">
                 <div class="status-item">
                     <div class="status-dot" id="ollama-status"></div>
-                    <span id="model-provider-label">OpenAI</span>
+                    <span id="model-provider-label">Model Link</span>
                 </div>
                 <div class="status-item">
                     <div class="status-dot" id="tts-status"></div>
-                    <span id="tts-provider">TTS</span>
+                    <span id="tts-provider">Voice Link</span>
                 </div>
                 <div class="status-item">
                     <div class="status-dot" id="stt-status"></div>
-                    <span>Speech Recognition</span>
+                    <span>Speech Input</span>
                 </div>
             </div>
             <div class="stats-info" id="conversation-stats">
@@ -989,20 +1172,19 @@
         <div class="header-right">
             <div class="conversation-controls">
                 <button class="control-button" id="load-history-btn" title="Reload conversation history">
-                    🔄 Reload History
+                    Reload
                 </button>
                 <button class="control-button danger" id="clear-history-btn" title="Clear all conversation history">
-                    🗑️ Clear History
+                    Clear Log
                 </button>
                 <button class="control-button" id="creativity-toggle-btn" title="Toggle AI creativity controls">
-                    🎭 Creativity
+                    Model Controls
                 </button>
             </div>
 
-            <!-- Hidden AI Creativity Panel -->
             <div class="creativity-panel" id="creativity-panel">
                 <div class="creativity-header">
-                    <h4 class="creativity-title">🎭 AI Creativity Controls</h4>
+                    <h4 class="creativity-title">Inference Controls</h4>
                     <button class="creativity-toggle" id="reset-creativity-btn" title="Reset to defaults">Reset</button>
                 </div>
                 <div class="creativity-controls">
@@ -1042,18 +1224,17 @@
     </div>
 
     <div class="chat-container">
-        <!-- RAG Section -->
         <div class="rag-section" id="rag-section">
             <div class="rag-header">
-                <h3 class="rag-title">📚 Knowledge Base (RAG)</h3>
+                <h3 class="rag-title">Knowledge Base</h3>
                 <span class="rag-status" id="rag-status">Checking...</span>
             </div>
             <div class="rag-content">
                 <div class="file-upload">
                     <input type="file" id="file-input" class="file-input" accept=".txt,.md,.pdf,.docx,.json" multiple>
                     <div class="file-drop-zone" id="file-drop-zone">
-                        <div class="drop-icon">📁</div>
-                        <div class="drop-text">Drag & drop documents here</div>
+                        <div class="drop-icon">ARCHIVE</div>
+                        <div class="drop-text">Drop source files for local processing</div>
                         <div class="drop-hint">or click to browse (.txt, .md, .pdf, .docx, .json)</div>
                         <div class="upload-progress" id="upload-progress">
                             <div class="upload-progress-bar" id="upload-progress-bar"></div>
@@ -1066,10 +1247,9 @@
             </div>
         </div>
 
-        <!-- ComfyUI Image Generation Section -->
         <div class="comfyui-section" id="comfyui-section">
             <div class="comfyui-header">
-                <h3 class="comfyui-title">🎨 Image Generation (ComfyUI)</h3>
+                <h3 class="comfyui-title">Local Imaging</h3>
                 <span class="comfyui-status" id="comfyui-status">Checking...</span>
             </div>
             <div class="comfyui-content">
@@ -1085,7 +1265,7 @@
                         <textarea 
                             id="negative-prompt" 
                             class="negative-prompt" 
-                            placeholder="What to avoid in the image (optional)..."
+                            placeholder="Exclusions or negatives (optional)..."
                             rows="1"
                             maxlength="200"
                         ></textarea>
@@ -1131,8 +1311,8 @@
                     </div>
                     <div class="generation-actions">
                         <button class="generate-btn" id="generate-btn" disabled>
-                            <span class="btn-text">🎨 Generate Image</span>
-                            <span class="btn-spinner" style="display: none;">⏳ Generating...</span>
+                            <span class="btn-text">Render Image</span>
+                            <span class="btn-spinner" style="display: none;">Rendering...</span>
                         </button>
                     </div>
                 </div>
@@ -1148,7 +1328,7 @@
         <div class="messages-container" id="messages">
             <div class="message assistant">
                 <div class="message-content">
-                    <div>👋 Hello! I'm your local AI assistant. You can type or speak to me, and I'll respond with both text and voice. Upload documents to enhance my knowledge! How can I help you today?</div>
+                    <div>Local assistant online. You can type, speak, upload source material, or route image work to the local render stack.</div>
                 </div>
             </div>
         </div>
@@ -1160,7 +1340,7 @@
                         type="text" 
                         class="text-input" 
                         id="message-input" 
-                        placeholder="Type your message or click the microphone to speak..."
+                        placeholder="Enter message or use speech input..."
                         maxlength="2000"
                     >
                 </div>
@@ -1171,14 +1351,14 @@
                         <img id="image-preview" class="image-preview" alt="Image preview">
                         <button class="remove-image" id="remove-image" title="Remove image">×</button>
                     </div>
-                    <button class="control-btn image-btn" id="image-btn" title="Upload image">
-                        📷
+                    <button class="control-btn image-btn" id="image-btn" title="Attach image">
+                        Img
                     </button>
-                    <button class="control-btn mic-btn" id="mic-btn" title="Click to speak">
-                        🎤
+                    <button class="control-btn mic-btn" id="mic-btn" title="Speech input">
+                        Mic
                     </button>
                     <button class="control-btn send-btn" id="send-btn" title="Send message">
-                        ➤
+                        Send
                     </button>
                 </div>
             </div>
