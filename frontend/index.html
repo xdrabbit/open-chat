@@ -298,15 +298,40 @@
         .rag-content {
             display: flex;
             gap: 1rem;
-            align-items: center;
+            align-items: flex-start;
             flex-wrap: wrap;
         }
 
         .file-upload {
             display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.75rem;
             flex: 1;
+        }
+
+        .ingest-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .ingest-label {
+            font-size: 0.74rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-soft);
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+        }
+
+        .ingest-select {
+            padding: 0.55rem 0.7rem;
+            border: 1px solid rgba(19, 23, 28, 0.12);
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.84);
+            color: var(--text);
+            min-width: 220px;
         }
 
         .file-input {
@@ -403,6 +428,85 @@
             font-size: 0.8rem;
             color: var(--text-soft);
             margin-left: auto;
+        }
+
+        .archive-manager {
+            width: 100%;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--line);
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .archive-manager-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .archive-manager-title {
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-soft);
+            font-family: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", monospace;
+        }
+
+        .archive-documents {
+            display: grid;
+            gap: 0.6rem;
+        }
+
+        .archive-document {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.75rem;
+            align-items: start;
+            padding: 0.8rem;
+            border: 1px solid rgba(89, 103, 117, 0.12);
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.54);
+        }
+
+        .archive-document-meta {
+            display: grid;
+            gap: 0.3rem;
+        }
+
+        .archive-document-name {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .archive-document-details {
+            font-size: 0.8rem;
+            color: var(--text-soft);
+            line-height: 1.45;
+        }
+
+        .archive-document-delete {
+            padding: 0.45rem 0.7rem;
+            border: 1px solid rgba(143, 69, 65, 0.22);
+            border-radius: var(--radius-sm);
+            background: rgba(143, 69, 65, 0.08);
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .archive-document-delete:hover {
+            background: rgba(143, 69, 65, 0.14);
+            border-color: rgba(143, 69, 65, 0.34);
+        }
+
+        .archive-empty {
+            font-size: 0.85rem;
+            color: var(--text-soft);
         }
 
         /* ComfyUI Section Styles */
@@ -1290,6 +1394,14 @@
             </div>
             <div class="rag-content">
                 <div class="file-upload">
+                    <div class="ingest-controls">
+                        <label class="ingest-label" for="ingest-intent">Import Mode</label>
+                        <select id="ingest-intent" class="ingest-select">
+                            <option value="auto">Auto classify</option>
+                            <option value="personality">Force personality memory</option>
+                            <option value="reference">Force exact reference</option>
+                        </select>
+                    </div>
                     <input type="file" id="file-input" class="file-input" accept=".txt,.md,.pdf,.docx,.json" multiple>
                     <div class="file-drop-zone" id="file-drop-zone">
                         <div class="drop-icon">ARCHIVE</div>
@@ -1302,6 +1414,14 @@
                 </div>
                 <div class="rag-stats" id="rag-stats">
                     No documents uploaded yet
+                </div>
+            </div>
+            <div class="archive-manager">
+                <div class="archive-manager-header">
+                    <div class="archive-manager-title">Tracked Imports</div>
+                </div>
+                <div class="archive-documents" id="archive-documents">
+                    <div class="archive-empty">No tracked imports yet.</div>
                 </div>
             </div>
         </div>

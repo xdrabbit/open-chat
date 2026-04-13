@@ -571,6 +571,38 @@ class SQLiteVectorStore(VectorStore):
         except Exception as e:
             logger.error(f"Failed to delete document {document_id}: {e}")
             return False
+
+    async def delete_documents_by_content_hash(self, content_hash: str) -> int:
+        """Delete chunks whose metadata points at a specific content hash."""
+        if not content_hash:
+            return 0
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, metadata FROM vector_documents")
+            rows = cursor.fetchall()
+
+            ids_to_delete = []
+            for row_id, metadata_str in rows:
+                try:
+                    metadata = json.loads(metadata_str) if metadata_str else {}
+                except Exception:
+                    metadata = {}
+                if metadata.get("content_hash") == content_hash:
+                    ids_to_delete.append(row_id)
+
+            deleted = 0
+            if ids_to_delete:
+                cursor.executemany("DELETE FROM vector_documents WHERE id = ?", [(row_id,) for row_id in ids_to_delete])
+                deleted = cursor.rowcount
+                conn.commit()
+
+            conn.close()
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to delete document chunks for content hash {content_hash}: {e}")
+            return 0
     
     def get_stats(self) -> Dict[str, Any]:
         """Get vector store statistics"""
@@ -677,6 +709,46 @@ class SQLiteVectorStore(VectorStore):
             logger.error(f"Failed to load persona memories: {e}")
             return []
 
+    async def delete_persona_memories(
+        self,
+        *,
+        source: Optional[str] = None,
+        filename: Optional[str] = None,
+        content_hash: Optional[str] = None,
+    ) -> int:
+        """Delete persona memories matching a source, filename, or content hash."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, source, filename, metadata FROM persona_memories")
+            rows = cursor.fetchall()
+
+            ids_to_delete = []
+            for memory_id, memory_source, memory_filename, metadata_str in rows:
+                try:
+                    metadata = json.loads(metadata_str) if metadata_str else {}
+                except Exception:
+                    metadata = {}
+
+                source_match = source and memory_source == source
+                filename_match = filename and memory_filename == filename
+                content_hash_match = content_hash and metadata.get("content_hash") == content_hash
+
+                if source_match or filename_match or content_hash_match:
+                    ids_to_delete.append(memory_id)
+
+            deleted = 0
+            if ids_to_delete:
+                cursor.executemany("DELETE FROM persona_memories WHERE id = ?", [(memory_id,) for memory_id in ids_to_delete])
+                deleted = cursor.rowcount
+                conn.commit()
+
+            conn.close()
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to delete persona memories: {e}")
+            return 0
+
 class RAGService:
     """Enhanced RAG service with full functionality"""
     
@@ -753,6 +825,24 @@ class RAGService:
         except Exception as e:
             logger.error(f"Failed to extract document text for persona distillation: {e}")
             return ""
+
+    async def delete_documents_by_content_hash(self, content_hash: str) -> int:
+        """Delete exact-reference chunks matching a content hash."""
+        return await self.vector_store.delete_documents_by_content_hash(content_hash)
+
+    async def delete_persona_memories(
+        self,
+        *,
+        source: Optional[str] = None,
+        filename: Optional[str] = None,
+        content_hash: Optional[str] = None,
+    ) -> int:
+        """Delete persona-memory records matching a source, filename, or content hash."""
+        return await self.vector_store.delete_persona_memories(
+            source=source,
+            filename=filename,
+            content_hash=content_hash,
+        )
 
     def should_distill_personality(self, file_path: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Heuristic gate for personality-memory extraction."""

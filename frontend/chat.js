@@ -19,6 +19,7 @@ class OpenChat {
         this.loadConversationHistory();
         this.loadConversationStats();
         this.checkRAGStatus();
+        this.loadArchiveDocuments();
         this.checkComfyUIStatus();
     }
 
@@ -73,6 +74,8 @@ class OpenChat {
         this.fileDropZone = document.getElementById('file-drop-zone');
         this.uploadProgress = document.getElementById('upload-progress');
         this.uploadProgressBar = document.getElementById('upload-progress-bar');
+        this.ingestIntentSelect = document.getElementById('ingest-intent');
+        this.archiveDocuments = document.getElementById('archive-documents');
         
         // ComfyUI elements
         this.comfyuiStatus = document.getElementById('comfyui-status');
@@ -907,6 +910,7 @@ class OpenChat {
             
             // Update stats
             await this.checkRAGStatus();
+            await this.loadArchiveDocuments();
             
             // Reset file input
             this.fileInput.value = '';
@@ -929,6 +933,7 @@ class OpenChat {
     async uploadSingleFile(file) {
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('ingest_intent', this.ingestIntentSelect?.value || 'auto');
         
         const response = await fetch(`${this.apiBase}/rag/upload`, {
             method: 'POST',
@@ -975,6 +980,10 @@ class OpenChat {
             uploadMessage = `Document "${file.name}" was indexed as ${result.archive_type || 'reference material'}${result.era_label ? ` in era "${result.era_label}"` : ''}${retentionText}.`;
         }
 
+        if (result.manual_direction && result.manual_direction !== 'auto') {
+            uploadMessage += ` Manual import mode: ${result.manual_direction}.`;
+        }
+
         if (result.formative_moments_created) {
             uploadMessage += ` I also preserved ${result.formative_moments_created} formative moment${result.formative_moments_created === 1 ? '' : 's'}.`;
         }
@@ -1004,8 +1013,110 @@ class OpenChat {
     hideUploadProgress() {
         this.uploadProgress.style.display = 'none';
         this.uploadProgressBar.style.width = '0%';
-        this.fileDropZone.querySelector('.drop-text').textContent = 'Drag & drop documents here';
+        this.fileDropZone.querySelector('.drop-text').textContent = 'Drop source files for local processing';
         this.fileDropZone.querySelector('.drop-hint').textContent = 'or click to browse (.txt, .md, .pdf, .docx, .json)';
+    }
+
+    async loadArchiveDocuments() {
+        try {
+            const response = await fetch(`${this.apiBase}/archive/documents?limit=40`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.renderArchiveDocuments(data.documents || []);
+        } catch (error) {
+            console.error('Failed to load archive documents:', error);
+            if (this.archiveDocuments) {
+                this.archiveDocuments.innerHTML = '<div class="archive-empty">Tracked imports unavailable.</div>';
+            }
+        }
+    }
+
+    renderArchiveDocuments(documents) {
+        if (!this.archiveDocuments) return;
+
+        if (!documents.length) {
+            this.archiveDocuments.innerHTML = '<div class="archive-empty">No tracked imports yet.</div>';
+            return;
+        }
+
+        this.archiveDocuments.innerHTML = '';
+        documents.forEach((doc) => {
+            const row = document.createElement('div');
+            row.className = 'archive-document';
+
+            const meta = document.createElement('div');
+            meta.className = 'archive-document-meta';
+
+            const name = document.createElement('div');
+            name.className = 'archive-document-name';
+            name.textContent = doc.filename;
+            meta.appendChild(name);
+
+            const details = document.createElement('div');
+            details.className = 'archive-document-details';
+            const personalityFlag = doc.should_influence_personality ? 'persona' : 'non-persona';
+            const legalFlag = doc.legal_sensitivity ? 'legal-sensitive' : 'not legal-sensitive';
+            details.textContent = `${doc.archive_type} • ${doc.retention_mode} • ${personalityFlag} • ${legalFlag}${doc.era_label ? ` • ${doc.era_label}` : ''}`;
+            meta.appendChild(details);
+
+            if (doc.summary) {
+                const summary = document.createElement('div');
+                summary.className = 'archive-document-details';
+                summary.textContent = doc.summary;
+                meta.appendChild(summary);
+            }
+
+            row.appendChild(meta);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'archive-document-delete';
+            deleteBtn.textContent = 'Remove';
+            deleteBtn.addEventListener('click', () => this.deleteArchiveDocument(doc.id, doc.filename));
+            row.appendChild(deleteBtn);
+
+            this.archiveDocuments.appendChild(row);
+        });
+    }
+
+    async deleteArchiveDocument(documentId, filename) {
+        const confirmed = confirm(
+            `Remove "${filename}" from tracked imports, RAG, and personality memory? The sealed research vault will remain unchanged.`
+        );
+        if (!confirmed) return;
+
+        try {
+            const response = await fetch(`${this.apiBase}/archive/documents/${documentId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            await this.checkRAGStatus();
+            await this.loadArchiveDocuments();
+
+            this.addMessage(
+                `Removed "${result.filename}" from tracked imports. Deleted ${result.deleted_rag_chunks} RAG chunk${result.deleted_rag_chunks === 1 ? '' : 's'} and ${result.deleted_persona_memories} persona memory record${result.deleted_persona_memories === 1 ? '' : 's'}. The sealed research vault was left untouched.`,
+                'assistant',
+                null,
+                new Date()
+            );
+        } catch (error) {
+            console.error('Delete archive document error:', error);
+            this.addMessage(
+                `Removal failed: ${error.message}`,
+                'assistant',
+                null,
+                null,
+                true
+            );
+        }
     }
 
     // Image handling methods

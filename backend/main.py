@@ -611,7 +611,10 @@ async def get_conversation_stats():
 
 # RAG Endpoints
 @app.post("/rag/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    file: UploadFile = File(...),
+    ingest_intent: str = Form("auto"),
+):
     """Upload and process a document for RAG"""
     temp_file_path = None
     try:
@@ -631,6 +634,10 @@ async def upload_document(file: UploadFile = File(...)):
                 detail=f"Unsupported file format. Supported: {', '.join(supported_formats)}"
             )
         
+        normalized_ingest_intent = (ingest_intent or "auto").strip().lower()
+        if normalized_ingest_intent not in {"auto", "personality", "reference"}:
+            raise HTTPException(status_code=400, detail="ingest_intent must be auto, personality, or reference")
+
         # Save uploaded file temporarily
         temp_dir = "temp_documents"
         os.makedirs(temp_dir, exist_ok=True)
@@ -648,6 +655,7 @@ async def upload_document(file: UploadFile = File(...)):
             "content_type": file.content_type,
             "upload_time": datetime.now().isoformat(),
             "file_hash": upload_file_hash,
+            "manual_direction": normalized_ingest_intent,
         }
 
         if file_extension == ".json":
@@ -758,6 +766,7 @@ async def upload_document(file: UploadFile = File(...)):
                 "era_label": None,
                 "retention_counts": retention_counts,
                 "file_hash": upload_file_hash,
+                "manual_direction": normalized_ingest_intent,
             }
 
         extracted_text = await rag_service.extract_document_text(temp_file_path)
@@ -828,6 +837,7 @@ async def upload_document(file: UploadFile = File(...)):
                 "duplicate_of": archive_result.get("duplicate_of"),
                 "file_hash": archive_result.get("file_hash"),
                 "content_hash": archive_result.get("content_hash"),
+                "manual_direction": normalized_ingest_intent,
             }
         else:
             raise HTTPException(status_code=500, detail="Failed to process document")
@@ -863,6 +873,20 @@ async def get_archive_documents(limit: int = 100):
         return {"documents": await archive_service.list_documents(limit)}
     except Exception as e:
         logger.error(f"Error listing archive documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/archive/documents/{document_id}")
+async def delete_archive_document(document_id: str):
+    """Remove an archive document from archive storage, RAG, and persona memory."""
+    try:
+        result = await archive_service.delete_document(document_id)
+        if not result.get("deleted"):
+            raise HTTPException(status_code=404, detail="Archive document not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting archive document {document_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/archive/eras")

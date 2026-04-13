@@ -319,6 +319,28 @@ class ArchiveService:
             return "exact_reference" if legal_sensitivity else "distill_only"
         return "exact_reference"
 
+    def apply_manual_direction(
+        self,
+        analysis: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Allow the user to override automatic routing for specific files."""
+        metadata = metadata or {}
+        manual_direction = (metadata.get("manual_direction") or "auto").strip().lower()
+        updated = dict(analysis)
+
+        if manual_direction == "personality":
+            updated["archive_type"] = "archive_chat"
+            updated["retention_mode"] = "distill_only"
+            updated["legal_sensitivity"] = False
+            updated["should_influence_personality"] = True
+        elif manual_direction == "reference":
+            updated["retention_mode"] = "exact_reference"
+            updated["should_influence_personality"] = False
+
+        updated["manual_direction"] = manual_direction
+        return updated
+
     async def prepare_document(
         self,
         *,
@@ -342,7 +364,8 @@ class ArchiveService:
                 **hashes,
             },
         )
-        retention_mode = metadata.get("retention_mode") or self.select_retention_mode(analysis)
+        analysis = self.apply_manual_direction(analysis, metadata)
+        retention_mode = metadata.get("retention_mode") or analysis.get("retention_mode") or self.select_retention_mode(analysis)
 
         return {
             "analysis": analysis,
@@ -476,6 +499,69 @@ class ArchiveService:
             "file_hash": file_hash,
             "content_hash": content_hash,
             "skipped_duplicate": False,
+        }
+
+    async def delete_document(self, document_id: str) -> Dict[str, Any]:
+        """Delete an archive document plus any RAG/persona material derived from it."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, filename, source_path, archive_type, retention_mode, file_hash, content_hash
+            FROM archive_documents
+            WHERE id = ?
+            """,
+            (document_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return {"deleted": False, "reason": "not_found"}
+
+        record = {
+            "id": row[0],
+            "filename": row[1],
+            "source_path": row[2],
+            "archive_type": row[3],
+            "retention_mode": row[4],
+            "file_hash": row[5],
+            "content_hash": row[6],
+        }
+
+        cursor.execute("DELETE FROM formative_moments WHERE document_id = ?", (document_id,))
+        deleted_moments = cursor.rowcount
+        cursor.execute("DELETE FROM archive_documents WHERE id = ?", (document_id,))
+        deleted_archive_rows = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        deleted_rag_chunks = 0
+        deleted_persona_memories = 0
+        if self.rag_service:
+            if record["content_hash"]:
+                deleted_rag_chunks = await self.rag_service.delete_documents_by_content_hash(record["content_hash"])
+                deleted_persona_memories = await self.rag_service.delete_persona_memories(
+                    source=record["source_path"],
+                    filename=record["filename"],
+                    content_hash=record["content_hash"],
+                )
+            else:
+                deleted_persona_memories = await self.rag_service.delete_persona_memories(
+                    source=record["source_path"],
+                    filename=record["filename"],
+                )
+
+        return {
+            "deleted": deleted_archive_rows > 0,
+            "document_id": document_id,
+            "filename": record["filename"],
+            "archive_type": record["archive_type"],
+            "retention_mode": record["retention_mode"],
+            "deleted_archive_rows": deleted_archive_rows,
+            "deleted_formative_moments": deleted_moments,
+            "deleted_rag_chunks": deleted_rag_chunks,
+            "deleted_persona_memories": deleted_persona_memories,
+            "research_vault_unchanged": True,
         }
 
     def get_stats(self) -> Dict[str, Any]:
