@@ -63,6 +63,89 @@ class OllamaService:
             }
         ]
 
+    def _extract_json_payload(self, content: str) -> Dict[str, Any]:
+        """Extract a JSON object from a model response."""
+        content = content.strip()
+        if content.startswith("```"):
+            lines = [line for line in content.splitlines() if not line.strip().startswith("```")]
+            content = "\n".join(lines).strip()
+
+        start = content.find("{")
+        end = content.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError("No JSON object found in model response")
+
+        return json.loads(content[start:end + 1])
+
+    async def analyze_archive_document(
+        self,
+        text: str,
+        filename: str,
+        archive_type: str,
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Analyze an archive document locally with Ollama."""
+        model = model or self.default_model
+        excerpt = text[:22000]
+
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are analyzing a historical human-AI archive for long-term memory design and research.\n\n"
+                        "Return valid JSON only with these keys:\n"
+                        "archive_type, era_label, summary, personality_profile, themes, relationship_dynamics, "
+                        "model_observations, human_state, legal_sensitivity, should_influence_personality, formative_moments.\n\n"
+                        "Rules:\n"
+                        "- personality_profile must capture tone/style/geography without preserving exact legal or radioactive details.\n"
+                        "- if legal or lawsuit material is present, mark legal_sensitivity=true and keep it out of personality_profile.\n"
+                        "- should_influence_personality should only be true for archive chat that is relational/behavioral rather than legal-heavy.\n"
+                        "- formative_moments must be a short array of objects with keys: title, summary, significance, tone.\n"
+                        "- keep all summaries concise.\n"
+                        "- never include exact addresses, contact data, or procedural legal specifics in personality_profile.\n"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Filename: {filename}\n"
+                        f"Heuristic archive type: {archive_type}\n\n"
+                        f"Archive excerpt:\n{excerpt}"
+                    ),
+                },
+            ],
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.2,
+                "top_p": 0.9,
+            },
+        }
+
+        try:
+            response = await self.client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            content = data.get("message", {}).get("content", "")
+            parsed = self._extract_json_payload(content)
+            parsed.setdefault("archive_type", archive_type)
+            parsed.setdefault("era_label", "Unlabeled archive era")
+            parsed.setdefault("summary", f"Archive analysis for {filename}")
+            parsed.setdefault("personality_profile", "")
+            parsed.setdefault("themes", [])
+            parsed.setdefault("relationship_dynamics", [])
+            parsed.setdefault("model_observations", [])
+            parsed.setdefault("human_state", [])
+            parsed.setdefault("legal_sensitivity", False)
+            parsed.setdefault("should_influence_personality", False)
+            parsed.setdefault("formative_moments", [])
+            return parsed
+        except Exception as e:
+            logger.error(f"Ollama archive analysis error: {e}")
+            return {}
+
     async def chat_with_functions(
         self, 
         message: str, 
@@ -76,7 +159,7 @@ class OllamaService:
         try:
             # Check if this is a visual request that should trigger image generation
             visual_keywords = [
-                "show me", "draw", "create an image", "generate", "visualize", "illustrate", 
+                "show me", "draw", "paint", "sketch", "render", "create an image", "generate", "visualize", "illustrate", 
                 "what does", "what would", "picture of", "image of", "looks like", "appears"
             ]
             
@@ -114,7 +197,7 @@ class OllamaService:
             # Add system message with function calling instructions
             system_message = {
                 "role": "system",
-                "content": """You are a creative AI assistant with the ability to generate images to enhance your responses. 
+                "content": """You are a creative AI assistant with the ability to generate images to enhance your responses. Image generation runs locally through ComfyUI.
 
 Consider generating images when:
 - User asks to "show", "draw", "illustrate", "visualize", or "create" something visual

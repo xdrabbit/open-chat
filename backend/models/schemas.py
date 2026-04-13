@@ -8,6 +8,7 @@ class ChatMessage(BaseModel):
     content: str
     timestamp: datetime
     audio_file: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 class ChatRequest(BaseModel):
     message: str
@@ -23,12 +24,22 @@ class GeneratedImage(BaseModel):
     style: Optional[str] = "artistic"
     ai_initiated: bool = False
 
+class RAGSource(BaseModel):
+    source_id: str
+    filename: str
+    source: str
+    chunk_index: int
+    total_chunks: int
+    similarity: float
+    snippet: str
+
 class ChatResponse(BaseModel):
     response: str
     model: str
     timestamp: datetime
     audio_file: Optional[str] = None
     generated_image: Optional[GeneratedImage] = None
+    rag_sources: Optional[List[RAGSource]] = None
 
 class TranscriptionRequest(BaseModel):
     audio_data: bytes
@@ -45,6 +56,8 @@ class TTSResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    model_provider: str
+    provider_connected: bool
     ollama_connected: bool
     tts_provider: str
     services: List[str]

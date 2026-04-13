@@ -1,6 +1,6 @@
-# Open Chat - Local AI Voice Assistant
+# Open Chat - Voice Assistant with OpenAI or Ollama
 
-A self-contained web application that enables real-time conversational interaction with Ollama models using both voice and text. Features offline speech recognition, configurable text-to-speech, and a clean web interface.
+A self-contained web application that enables real-time conversational interaction with OpenAI or Ollama models using both voice and text. The default configuration now uses OpenAI's `gpt-4.1` family. It includes offline speech recognition, configurable text-to-speech, and a clean web interface.
 
 ## 🚀 Features
 
@@ -9,7 +9,7 @@ A self-contained web application that enables real-time conversational interacti
 - **Configurable TTS**: Supports ElevenLabs (cloud) or pyttsx3 (local) text-to-speech
 - **Real-time Conversation**: Fluid chat experience with audio playback
 - **Conversation History**: SQLite-backed message storage with retrieval
-- **Model Selection**: Choose from available Ollama models
+- **Model Selection**: Choose from available OpenAI or Ollama models
 - **Responsive UI**: Clean, modern interface that works on desktop and mobile
 - **Fully Offline Capable**: Can operate without internet (except for ElevenLabs TTS)
 
@@ -17,10 +17,20 @@ A self-contained web application that enables real-time conversational interacti
 
 ### Required Software
 - **Python 3.8+** with pip
-- **Ollama** installed and running locally
+- **OpenAI API key** for the default setup, or Ollama for a fully local setup
 - **Node.js** (optional, for development)
 
-### Ollama Setup
+### OpenAI Setup (Default)
+1. Create an OpenAI API key
+2. Copy `.env.example` to `.env`
+3. Set:
+   ```env
+   MODEL_PROVIDER=openai
+   OPENAI_API_KEY=your_key_here
+   OPENAI_MODEL=gpt-4.1
+   ```
+
+### Ollama Setup (Optional)
 1. Install Ollama from [ollama.ai](https://ollama.ai)
 2. Start Ollama service:
    ```bash
@@ -77,11 +87,33 @@ DEBUG=True                      # Enable debug mode
 CORS_ORIGINS=http://192.168.0.12:*,http://localhost:*  # Allowed origins
 ```
 
+### AI Provider Settings
+```env
+LAN_ONLY=False                   # Set True to block cloud TTS/OpenAI usage
+CLOUD_TEXT_ONLY=False            # When True, remote OpenAI only receives live chat text
+MODEL_PROVIDER=openai              # Options: openai, ollama
+ARCHIVE_ANALYSIS_PROVIDER=local    # Keep raw-file parsing/distillation local by default
+OPENAI_API_KEY=your_key_here       # Required when MODEL_PROVIDER=openai
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1               # Default OpenAI model
+OPENAI_MODELS=gpt-4.1,gpt-4.1-mini,gpt-4.1-nano
+```
+
 ### Ollama Settings
 ```env
 OLLAMA_HOST=http://localhost:11434  # Ollama API endpoint
 OLLAMA_MODEL=llama3.2               # Default model name
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+EMBEDDING_LOCAL_ONLY=False          # Set True to prevent Hugging Face fetches
 ```
+
+### Research Vault
+```env
+RESEARCH_VAULT_ENABLED=True
+RESEARCH_VAULT_KEY=
+RESEARCH_VAULT_KEY_FILE=./research_vault.key
+```
+The research vault is encrypted at rest, append-only through the app, and has no cleartext read endpoint. The app exposes only aggregate stats and a full wipe operation.
 
 ### TTS Configuration
 ```env
@@ -90,10 +122,36 @@ ELEVENLABS_API_KEY=your_key_here    # Required for ElevenLabs
 ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM  # ElevenLabs voice
 ```
 
+### Hard LAN-Only Mode
+```env
+LAN_ONLY=True
+MODEL_PROVIDER=ollama
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:14b
+TTS_PROVIDER=pyttsx3
+EMBEDDING_LOCAL_ONLY=True
+COMFYUI_URL=http://192.168.0.40:8188
+```
+
+### Local Parsing + OpenAI Chat Only
+```env
+CLOUD_TEXT_ONLY=True
+ARCHIVE_ANALYSIS_PROVIDER=local
+MODEL_PROVIDER=openai
+TTS_PROVIDER=pyttsx3
+EMBEDDING_LOCAL_ONLY=True
+```
+
 ### Audio Settings
 ```env
 AUDIO_TEMP_DIR=./temp_audio     # Temporary audio storage
 MAX_AUDIO_SIZE_MB=25            # Max upload size
+```
+
+### Local ComfyUI Settings
+```env
+COMFYUI_URL=http://127.0.0.1:8188
+COMFYUI_FALLBACK_URLS=http://localhost:8188
 ```
 
 ### Storage Settings
@@ -105,7 +163,7 @@ DB_PATH=./conversations.db      # SQLite database path
 ## 🎯 Usage
 
 ### Starting the Application
-1. Ensure Ollama is running with a model loaded
+1. Ensure your configured model provider is ready
 2. Start Open Chat:
    ```bash
    ./start.sh
@@ -125,8 +183,9 @@ To access from another device (like Mac Mini → WSL):
 - **Text Chat**: Type in the input field and press Enter or click Send
 - **Voice Chat**: Click the microphone button, speak, then click again to stop
 - **Audio Playback**: Assistant responses automatically play audio (if TTS enabled)
-- **Model Selection**: Choose different Ollama models from the dropdown
+- **Model Selection**: Choose different OpenAI or Ollama models from the dropdown
 - **TTS Provider**: Switch between ElevenLabs and local TTS
+- **Local Drawing**: Ask the chat to "draw", "paint", "sketch", or "render" something and it will use your local ComfyUI image generator
 
 ## 🏗️ Architecture
 

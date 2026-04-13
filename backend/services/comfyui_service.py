@@ -19,13 +19,16 @@ class ComfyUIService:
     """Service for integrating with ComfyUI for image generation"""
     
     def __init__(self):
-        # ComfyUI is working on Windows host - use that as primary
-        self.base_urls = [
-            "http://192.168.0.45:8188",     # Windows ComfyUI (working!)
-            "http://localhost:8188",         # Local ComfyUI fallback
-            "http://172.18.170.88:8188"      # WSL ComfyUI fallback
-        ]
-        self.base_url = self.base_urls[0]  # Start with Windows
+        self.base_urls = []
+        for url in [config.COMFYUI_URL, *config.COMFYUI_FALLBACK_URLS]:
+            normalized = url.rstrip("/")
+            if normalized and normalized not in self.base_urls:
+                self.base_urls.append(normalized)
+
+        if not self.base_urls:
+            self.base_urls = ["http://127.0.0.1:8188"]
+
+        self.base_url = self.base_urls[0]
         self.client_id = str(uuid.uuid4())
         self._tested_url = False
         
@@ -360,3 +363,7 @@ class ComfyUIService:
         except Exception as e:
             logger.error(f"Error getting queue status: {e}")
             return {}
+
+    def get_active_url(self) -> str:
+        """Return the current ComfyUI endpoint."""
+        return self.base_url

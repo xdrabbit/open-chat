@@ -5,12 +5,18 @@ from fastapi.responses import FileResponse
 import uvicorn
 import logging
 from datetime import datetime
+import hashlib
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from config import config
 from models.schemas import *
 from services.ollama_service import OllamaService
+from services.openai_service import OpenAIService
+from services.archive_service import ArchiveService
+from services.chatgpt_export_parser import parse_chatgpt_export_file
+from services.research_vault_service import ResearchVaultService
 from services.stt_service import STTService
 from services.tts_service import TTSService
 from services.conversation_service import ConversationService
@@ -32,12 +38,88 @@ if config_errors:
 
 # Initialize services
 ollama_service = OllamaService()
+openai_service = OpenAIService()
 stt_service = STTService()
 tts_service = TTSService()
 conversation_service = ConversationService()
 rag_service = create_rag_service()
+archive_llm_service = None
+if (
+    config.ARCHIVE_ANALYSIS_PROVIDER == "openai"
+    and config.MODEL_PROVIDER == "openai"
+    and (not config.LAN_ONLY or config.is_lan_safe_url(config.OPENAI_BASE_URL))
+):
+    archive_llm_service = openai_service
+elif config.ARCHIVE_ANALYSIS_PROVIDER == "local":
+    archive_llm_service = ollama_service
+archive_service = ArchiveService(rag_service.vector_store.db_path, analysis_service=archive_llm_service, rag_service=rag_service)
 vision_service = VisionService()
 comfyui_service = ComfyUIService()
+research_vault_service = ResearchVaultService(rag_service.vector_store.db_path)
+
+
+def get_default_chat_model() -> str:
+    """Return the configured default chat model for the active provider."""
+    if config.MODEL_PROVIDER == "openai":
+        return config.OPENAI_MODEL
+    return config.OLLAMA_MODEL
+
+
+def get_active_chat_service():
+    """Return the active chat service instance."""
+    if config.MODEL_PROVIDER == "openai":
+        return openai_service
+    return ollama_service
+
+
+def format_rag_sources(raw_sources):
+    """Convert retrieved source dicts to API-safe response objects."""
+    return [
+        RAGSource(
+            source_id=source["source_id"],
+            filename=source["filename"],
+            source=source["source"],
+            chunk_index=source["chunk_index"],
+            total_chunks=source["total_chunks"],
+            similarity=source["similarity"],
+            snippet=source["snippet"],
+        )
+        for source in raw_sources
+    ]
+
+
+def append_rag_citation_summary(response_text: str, rag_sources):
+    """Ensure source references are visible even if the model omits them inline."""
+    if not rag_sources:
+        return response_text
+
+    summary_lines = ["", "Sources:"]
+    for source in rag_sources:
+        summary_lines.append(
+            f"[{source.source_id}] {source.filename} (chunk {source.chunk_index + 1}/{source.total_chunks})"
+        )
+
+    return f"{response_text.rstrip()}\n" + "\n".join(summary_lines)
+
+
+def merge_prompt_contexts(user_query: str, personality_context: str, rag_query: str):
+    """Combine background personality memory with exact retrieval context."""
+    if personality_context and rag_query != user_query:
+        return f"{personality_context}\n\n{rag_query}"
+    if personality_context:
+        return f"{personality_context}\n\nUser question: {user_query}"
+    return rag_query
+
+
+def should_attach_private_context_to_chat() -> bool:
+    """False when remote OpenAI should only receive the user's live text input."""
+    if (
+        config.MODEL_PROVIDER == "openai"
+        and config.CLOUD_TEXT_ONLY
+        and not config.is_lan_safe_url(config.OPENAI_BASE_URL)
+    ):
+        return False
+    return True
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,12 +132,15 @@ async def lifespan(app: FastAPI):
     
     # Initialize RAG service
     await rag_service.initialize()
+    await archive_service.initialize()
+    await research_vault_service.initialize()
     
-    # Test Ollama connection
-    if await ollama_service.health_check():
-        logger.info("✅ Ollama connection successful")
+    # Test active provider connection
+    active_service = get_active_chat_service()
+    if await active_service.health_check():
+        logger.info(f"✅ {config.MODEL_PROVIDER.title()} connection successful")
     else:
-        logger.warning("⚠️  Ollama connection failed - check if Ollama is running")
+        logger.warning(f"⚠️  {config.MODEL_PROVIDER.title()} connection failed - check provider configuration")
     
     yield
     
@@ -64,7 +149,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Open Chat",
-    description="Local voice and text chat with Ollama models",
+    description="Voice and text chat with configurable OpenAI or Ollama models",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -81,9 +166,13 @@ app.add_middleware(
 # Mount only necessary static files for generated content
 app.mount("/temp_audio", StaticFiles(directory="../temp_audio"), name="temp_audio")
 app.mount("/audio", StaticFiles(directory="../temp_audio"), name="audio")
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 
-# API-only backend - no frontend serving
-# Frontend will be served by Electron app or separate React dev server
+
+@app.get("/")
+async def serve_frontend():
+    """Serve the chat frontend."""
+    return FileResponse("../frontend/index.html")
 
 @app.get("/voices")
 async def get_voices():
@@ -111,10 +200,14 @@ async def get_voices():
 
 @app.get("/models")
 async def get_models():
-    """Get available Ollama models with vision capabilities info"""
+    """Get available models for the active provider, with vision capability info."""
     try:
-        models = await ollama_service.get_available_models()
-        vision_models = await vision_service.get_available_vision_models()
+        if config.MODEL_PROVIDER == "openai":
+            models = await openai_service.get_available_models()
+            vision_models = list(models)
+        else:
+            models = await ollama_service.get_available_models()
+            vision_models = await vision_service.get_available_vision_models()
         
         # Add vision capability info to each model
         models_with_vision = []
@@ -125,22 +218,27 @@ async def get_models():
             })
         
         return {
+            "provider": config.MODEL_PROVIDER,
+            "default_model": get_default_chat_model(),
             "models": models,
             "models_with_info": models_with_vision,
             "vision_models": vision_models
         }
     except Exception as e:
         logger.error(f"Failed to fetch models: {e}")
+        default_model = get_default_chat_model()
         return {
-            "models": [config.OLLAMA_MODEL],
-            "models_with_info": [{"name": config.OLLAMA_MODEL, "supports_vision": False}],
-            "vision_models": []
+            "provider": config.MODEL_PROVIDER,
+            "default_model": default_model,
+            "models": [default_model],
+            "models_with_info": [{"name": default_model, "supports_vision": config.MODEL_PROVIDER == "openai"}],
+            "vision_models": [default_model] if config.MODEL_PROVIDER == "openai" else []
         }
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
-    ollama_connected = await ollama_service.health_check()
+    provider_connected = await get_active_chat_service().health_check()
     
     services = ["stt", "conversation"]
     if config.TTS_PROVIDER == "elevenlabs" and config.ELEVENLABS_API_KEY:
@@ -149,8 +247,10 @@ async def health_check():
         services.append("tts-local")
     
     return HealthResponse(
-        status="healthy" if ollama_connected else "degraded",
-        ollama_connected=ollama_connected,
+        status="healthy" if provider_connected else "degraded",
+        model_provider=config.MODEL_PROVIDER,
+        provider_connected=provider_connected,
+        ollama_connected=provider_connected if config.MODEL_PROVIDER == "ollama" else False,
         tts_provider=config.TTS_PROVIDER,
         services=services
     )
@@ -159,14 +259,20 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Process chat message and return response"""
     try:
-        # Enhance query with RAG context if available
-        enhanced_query = await enhance_chat_with_rag(request.message, rag_service)
+        if should_attach_private_context_to_chat():
+            conversation_history = await conversation_service.get_recent_messages(6)
+            rag_context = await enhance_chat_with_rag(request.message, rag_service, conversation_history)
+            personality_context = await rag_service.get_persona_context()
+            enhanced_query = merge_prompt_contexts(request.message, personality_context, rag_context["enhanced_query"])
+            rag_sources = format_rag_sources(rag_context["sources"])
+        else:
+            enhanced_query = request.message
+            rag_sources = []
         
-        # Get response from Ollama with function calling capability
-        model = request.model or config.OLLAMA_MODEL
+        model = request.model or get_default_chat_model()
+        active_service = get_active_chat_service()
         
-        # Use enhanced chat with function calling
-        chat_result = await ollama_service.chat_with_functions(
+        chat_result = await active_service.chat_with_functions(
             enhanced_query, 
             model,
             temperature=getattr(request, 'temperature', 0.7),
@@ -174,6 +280,7 @@ async def chat(request: ChatRequest):
         )
         
         response_text = chat_result.get("response", "")
+        response_text = append_rag_citation_summary(response_text, rag_sources)
         ai_initiated = chat_result.get("ai_initiated", False)
         
         # Handle AI-initiated image generation
@@ -229,16 +336,33 @@ async def chat(request: ChatRequest):
             role="assistant",
             content=response_text,
             timestamp=datetime.now(),
-            audio_file=audio_file
+            audio_file=audio_file,
+            metadata={"rag_sources": [source.model_dump() for source in rag_sources]} if rag_sources else None
         )
         await conversation_service.save_message(assistant_msg)
+
+        await research_vault_service.append_entry(
+            "chat_exchange",
+            {
+                "user_message": request.message,
+                "assistant_response": response_text,
+                "provider": config.MODEL_PROVIDER,
+                "model": model,
+                "cloud_text_only": config.CLOUD_TEXT_ONLY,
+                "rag_source_count": len(rag_sources),
+                "generated_image": generated_image.model_dump() if generated_image else None,
+                "timestamp": datetime.now().isoformat(),
+            },
+            model_name=model,
+        )
         
         # Build response
         response = ChatResponse(
             response=response_text,
             model=model,
             timestamp=datetime.now(),
-            audio_file=audio_file
+            audio_file=audio_file,
+            rag_sources=rag_sources or None
         )
         
         # Add generated image to response if available
@@ -261,33 +385,45 @@ async def chat_with_vision(
     """Process chat message with optional image and return response"""
     try:
         # Determine model to use
-        selected_model = model or config.OLLAMA_MODEL
+        selected_model = model or get_default_chat_model()
         
         # Check if image is provided and model supports vision
         if image:
+            if (
+                config.MODEL_PROVIDER == "openai"
+                and config.CLOUD_TEXT_ONLY
+                and not config.is_lan_safe_url(config.OPENAI_BASE_URL)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Image uploads are disabled while CLOUD_TEXT_ONLY is enabled for remote OpenAI. Use a local model for image analysis.",
+                )
+
             # Validate image
             image_data = await image.read()
             if not vision_service.validate_image(image_data):
                 raise HTTPException(status_code=400, detail="Invalid image format")
             
-            # Check if model supports vision
-            if not await vision_service.is_vision_model(selected_model):
-                # Try to find a vision model
-                vision_models = await vision_service.get_available_vision_models()
-                if vision_models:
-                    selected_model = vision_models[0]  # Use first available vision model
-                    logger.info(f"Switched to vision model: {selected_model}")
-                else:
-                    raise HTTPException(status_code=400, detail="No vision models available for image analysis")
-            
             # Get conversation context for better responses
             recent_messages = await conversation_service.get_recent_messages(5)
             context = [{"role": msg["role"], "content": msg["content"]} for msg in recent_messages]
             
-            # Analyze image with vision model
-            response_text = await vision_service.chat_with_image(
-                message, image_data, selected_model, context
-            )
+            if config.MODEL_PROVIDER == "openai":
+                response_text = await openai_service.chat_with_image(
+                    message, image_data, selected_model, context
+                )
+            else:
+                if not await vision_service.is_vision_model(selected_model):
+                    vision_models = await vision_service.get_available_vision_models()
+                    if vision_models:
+                        selected_model = vision_models[0]
+                        logger.info(f"Switched to vision model: {selected_model}")
+                    else:
+                        raise HTTPException(status_code=400, detail="No vision models available for image analysis")
+
+                response_text = await vision_service.chat_with_image(
+                    message, image_data, selected_model, context
+                )
             
             # Save image to temp directory for display
             image_filename = f"upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image.filename}"
@@ -304,8 +440,20 @@ async def chat_with_vision(
             
         else:
             # Regular text chat without image
-            enhanced_query = await enhance_chat_with_rag(message, rag_service)
-            response_text = await ollama_service.generate_response(enhanced_query, selected_model)
+            if should_attach_private_context_to_chat():
+                conversation_history = await conversation_service.get_recent_messages(6)
+                rag_context = await enhance_chat_with_rag(message, rag_service, conversation_history)
+                rag_sources = format_rag_sources(rag_context["sources"])
+                personality_context = await rag_service.get_persona_context()
+                enhanced_query = merge_prompt_contexts(message, personality_context, rag_context["enhanced_query"])
+            else:
+                rag_sources = []
+                enhanced_query = message
+            if config.MODEL_PROVIDER == "openai":
+                response_text = await openai_service.generate_response(enhanced_query, selected_model)
+            else:
+                response_text = await ollama_service.generate_response(enhanced_query, selected_model)
+            response_text = append_rag_citation_summary(response_text, rag_sources)
             
             # Save user message
             user_msg = ChatMessage(
@@ -328,15 +476,32 @@ async def chat_with_vision(
             role="assistant",
             content=response_text,
             timestamp=datetime.now(),
-            audio_file=audio_file
+            audio_file=audio_file,
+            metadata={"rag_sources": [source.model_dump() for source in rag_sources]} if 'rag_sources' in locals() and rag_sources else None
         )
         await conversation_service.save_message(assistant_msg)
+
+        await research_vault_service.append_entry(
+            "chat_exchange",
+            {
+                "user_message": message,
+                "assistant_response": response_text,
+                "provider": config.MODEL_PROVIDER,
+                "model": selected_model,
+                "cloud_text_only": config.CLOUD_TEXT_ONLY,
+                "image_uploaded": bool(image),
+                "rag_source_count": len(rag_sources) if 'rag_sources' in locals() and rag_sources else 0,
+                "timestamp": datetime.now().isoformat(),
+            },
+            model_name=selected_model,
+        )
         
         return ChatResponse(
             response=response_text,
             model=selected_model,
             timestamp=datetime.now(),
-            audio_file=audio_file
+            audio_file=audio_file,
+            rag_sources=rag_sources if 'rag_sources' in locals() and rag_sources else None
         )
         
     except Exception as e:
@@ -469,27 +634,201 @@ async def upload_document(file: UploadFile = File(...)):
         # Save uploaded file temporarily
         temp_dir = "temp_documents"
         os.makedirs(temp_dir, exist_ok=True)
-        temp_file_path = os.path.join(temp_dir, file.filename)
+        safe_filename = Path(file.filename).name
+        temp_file_path = os.path.join(temp_dir, safe_filename)
         
         with open(temp_file_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
+
+        upload_file_hash = hashlib.sha256(content).hexdigest()
         
-        # Process document
-        success = await rag_service.add_document(
-            temp_file_path, 
-            metadata={
-                "filename": file.filename,
-                "content_type": file.content_type,
-                "upload_time": datetime.now().isoformat()
+        upload_metadata = {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "upload_time": datetime.now().isoformat(),
+            "file_hash": upload_file_hash,
+        }
+
+        if file_extension == ".json":
+            threads = parse_chatgpt_export_file(temp_file_path)
+            if not threads:
+                raise HTTPException(status_code=400, detail="Unsupported JSON file. Expected a ChatGPT conversations export.")
+
+            imported_threads = 0
+            skipped_duplicates = 0
+            personality_memory_count = 0
+            archive_document_count = 0
+            formative_moments_count = 0
+            legal_sensitive_threads = 0
+            retention_counts = {"distill_only": 0, "exact_reference": 0}
+
+            for thread in threads:
+                thread_source = f"{safe_filename}::{thread['thread_filename']}"
+                thread_metadata = {
+                    **upload_metadata,
+                    "source_kind": "chatgpt_export_thread",
+                    "conversation_title": thread["title"],
+                    "archive_type": thread["archive_type"],
+                    "legal_sensitivity": thread["legal_sensitivity"],
+                    "era_label": thread["era_label"],
+                    "message_count": thread["message_count"],
+                    "evidence_count": thread["evidence_count"],
+                    "participants": thread["participants"],
+                    "create_time": thread["create_time"],
+                    "update_time": thread["update_time"],
+                    "legal_relevance_manifest": thread["legal_relevance_manifest"],
+                    "evidence_manifest": thread["evidence_manifest"],
+                }
+
+                prepared = await archive_service.prepare_document(
+                    filename=thread["thread_filename"],
+                    text=thread["text"],
+                    metadata=thread_metadata,
+                )
+
+                retention_mode = prepared["retention_mode"]
+                retention_counts[retention_mode] = retention_counts.get(retention_mode, 0) + 1
+
+                if not prepared.get("duplicate") and retention_mode == "exact_reference":
+                    success = await rag_service.add_text_document(
+                        thread["text"],
+                        source=thread_source,
+                        metadata={
+                            **thread_metadata,
+                            "filename": thread["thread_filename"],
+                            "retention_mode": retention_mode,
+                            "content_hash": prepared.get("content_hash"),
+                        },
+                    )
+                    if not success:
+                        continue
+
+                archive_result = await archive_service.process_document(
+                    file_path=thread_source,
+                    filename=thread["thread_filename"],
+                    text=thread["text"],
+                    metadata=thread_metadata,
+                    precomputed=prepared,
+                )
+
+                if archive_result.get("skipped_duplicate"):
+                    skipped_duplicates += 1
+                    continue
+
+                await research_vault_service.append_entry(
+                    "archive_ingest",
+                    {
+                        "source_kind": "chatgpt_export_thread",
+                        "parent_filename": file.filename,
+                        "thread_title": thread["title"],
+                        "thread_filename": thread["thread_filename"],
+                        "raw_text": thread["text"],
+                        "analysis": archive_result,
+                        "metadata": thread_metadata,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    source_ref=thread_source,
+                    file_hash=archive_result.get("file_hash"),
+                    content_hash=archive_result.get("content_hash"),
+                )
+
+                imported_threads += 1
+                archive_document_count += 1 if archive_result.get("archive_document_created") else 0
+                personality_memory_count += 1 if archive_result.get("personality_memory_created") else 0
+                formative_moments_count += int(archive_result.get("formative_moments_created", 0))
+                legal_sensitive_threads += 1 if archive_result.get("legal_sensitivity") else 0
+
+            if imported_threads == 0 and skipped_duplicates == 0:
+                raise HTTPException(status_code=500, detail="Failed to import any conversations from the ChatGPT export")
+
+            os.remove(temp_file_path)
+            return {
+                "message": f"Imported {imported_threads} conversation threads from '{file.filename}'",
+                "imported_threads": imported_threads,
+                "skipped_duplicates": skipped_duplicates,
+                "archive_document_created": archive_document_count > 0,
+                "archive_documents_created": archive_document_count,
+                "personality_memory_created": personality_memory_count > 0,
+                "personality_memories_created": personality_memory_count,
+                "legal_sensitivity": legal_sensitive_threads > 0,
+                "legal_sensitive_threads": legal_sensitive_threads,
+                "formative_moments_created": formative_moments_count,
+                "archive_type": "chatgpt_export",
+                "era_label": None,
+                "retention_counts": retention_counts,
+                "file_hash": upload_file_hash,
             }
+
+        extracted_text = await rag_service.extract_document_text(temp_file_path)
+        prepared = await archive_service.prepare_document(
+            filename=file.filename,
+            text=extracted_text,
+            metadata=upload_metadata,
+            raw_bytes=content,
         )
-        
-        # Clean up temp file
+        retention_mode = prepared["retention_mode"]
+
+        success = True
+        if not prepared.get("duplicate") and retention_mode == "exact_reference":
+            success = await rag_service.add_document(
+                temp_file_path,
+                metadata={
+                    **upload_metadata,
+                    "retention_mode": retention_mode,
+                    "content_hash": prepared.get("content_hash"),
+                }
+            )
+
+        archive_result = await archive_service.process_document(
+            file_path=temp_file_path,
+            filename=file.filename,
+            text=extracted_text,
+            metadata=upload_metadata,
+            precomputed=prepared,
+        ) if success else {
+            "archive_document_created": False,
+            "personality_memory_created": False,
+            "archive_type": "reference_document",
+            "era_label": None,
+            "legal_sensitivity": False,
+            "formative_moments_created": 0,
+            "retention_mode": retention_mode,
+            "skipped_duplicate": False,
+        }
+
         os.remove(temp_file_path)
-        
-        if success:
-            return {"message": f"Document '{file.filename}' processed successfully"}
+
+        if success or archive_result.get("skipped_duplicate"):
+            if not archive_result.get("skipped_duplicate"):
+                await research_vault_service.append_entry(
+                    "archive_ingest",
+                    {
+                        "source_kind": "single_document",
+                        "filename": file.filename,
+                        "raw_text": extracted_text,
+                        "analysis": archive_result,
+                        "metadata": upload_metadata,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    source_ref=temp_file_path,
+                    file_hash=archive_result.get("file_hash"),
+                    content_hash=archive_result.get("content_hash"),
+                )
+            return {
+                "message": f"Document '{file.filename}' processed successfully",
+                "personality_memory_created": archive_result.get("personality_memory_created", False),
+                "archive_document_created": archive_result.get("archive_document_created", False),
+                "archive_type": archive_result.get("archive_type"),
+                "era_label": archive_result.get("era_label"),
+                "legal_sensitivity": archive_result.get("legal_sensitivity", False),
+                "formative_moments_created": archive_result.get("formative_moments_created", 0),
+                "retention_mode": archive_result.get("retention_mode"),
+                "skipped_duplicate": archive_result.get("skipped_duplicate", False),
+                "duplicate_of": archive_result.get("duplicate_of"),
+                "file_hash": archive_result.get("file_hash"),
+                "content_hash": archive_result.get("content_hash"),
+            }
         else:
             raise HTTPException(status_code=500, detail="Failed to process document")
             
@@ -506,6 +845,60 @@ async def get_rag_stats():
         return rag_service.get_stats()
     except Exception as e:
         logger.error(f"Error getting RAG stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/archive/stats")
+async def get_archive_stats():
+    """Get archive-analysis statistics."""
+    try:
+        return archive_service.get_stats()
+    except Exception as e:
+        logger.error(f"Error getting archive stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/archive/documents")
+async def get_archive_documents(limit: int = 100):
+    """List analyzed archive documents."""
+    try:
+        return {"documents": await archive_service.list_documents(limit)}
+    except Exception as e:
+        logger.error(f"Error listing archive documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/archive/eras")
+async def get_archive_eras():
+    """List grouped archive eras."""
+    try:
+        return {"eras": await archive_service.list_eras()}
+    except Exception as e:
+        logger.error(f"Error listing archive eras: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/archive/formative-moments")
+async def get_formative_moments(limit: int = 100):
+    """List preserved formative moments."""
+    try:
+        return {"moments": await archive_service.list_formative_moments(limit)}
+    except Exception as e:
+        logger.error(f"Error listing formative moments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/research-vault/stats")
+async def get_research_vault_stats():
+    """Return aggregate research-vault stats without exposing cleartext."""
+    try:
+        return research_vault_service.get_stats()
+    except Exception as e:
+        logger.error(f"Error getting research vault stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/research-vault")
+async def wipe_research_vault():
+    """Delete the entire encrypted research vault."""
+    try:
+        return await research_vault_service.wipe()
+    except Exception as e:
+        logger.error(f"Error wiping research vault: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/rag/search")
@@ -556,6 +949,7 @@ async def get_comfyui_status():
         
         return {
             "connected": is_connected,
+            "base_url": comfyui_service.get_active_url(),
             "system_info": system_info,
             "queue_status": queue_status
         }
@@ -623,7 +1017,7 @@ async def generate_image_comfyui(
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        app,
         host=config.HOST,
         port=config.PORT,
         reload=False  # Temporarily disable reload for testing

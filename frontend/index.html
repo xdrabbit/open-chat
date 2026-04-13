@@ -626,6 +626,47 @@
             opacity: 0.7;
         }
 
+        .rag-sources {
+            margin-top: 0.85rem;
+            padding-top: 0.85rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            display: grid;
+            gap: 0.6rem;
+        }
+
+        .rag-sources-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            opacity: 0.7;
+        }
+
+        .rag-source-card {
+            background: rgba(102, 126, 234, 0.08);
+            border: 1px solid rgba(102, 126, 234, 0.14);
+            border-radius: 10px;
+            padding: 0.7rem 0.8rem;
+        }
+
+        .rag-source-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .rag-source-meta {
+            font-size: 0.75rem;
+            opacity: 0.75;
+            margin-bottom: 0.35rem;
+        }
+
+        .rag-source-snippet {
+            font-size: 0.84rem;
+            line-height: 1.45;
+            opacity: 0.92;
+        }
+
         .audio-controls {
             display: flex;
             align-items: center;
@@ -929,7 +970,7 @@
             <div class="status">
                 <div class="status-item">
                     <div class="status-dot" id="ollama-status"></div>
-                    <span>Ollama</span>
+                    <span id="model-provider-label">OpenAI</span>
                 </div>
                 <div class="status-item">
                     <div class="status-dot" id="tts-status"></div>
@@ -1009,11 +1050,11 @@
             </div>
             <div class="rag-content">
                 <div class="file-upload">
-                    <input type="file" id="file-input" class="file-input" accept=".txt,.md,.pdf,.docx" multiple>
+                    <input type="file" id="file-input" class="file-input" accept=".txt,.md,.pdf,.docx,.json" multiple>
                     <div class="file-drop-zone" id="file-drop-zone">
                         <div class="drop-icon">📁</div>
                         <div class="drop-text">Drag & drop documents here</div>
-                        <div class="drop-hint">or click to browse (.txt, .md, .pdf, .docx)</div>
+                        <div class="drop-hint">or click to browse (.txt, .md, .pdf, .docx, .json)</div>
                         <div class="upload-progress" id="upload-progress">
                             <div class="upload-progress-bar" id="upload-progress-bar"></div>
                         </div>
@@ -1146,10 +1187,9 @@
                 <div class="settings-group">
                     <label>Model:</label>
                     <select id="model-select">
-                        <option value="llama3.2">llama3.2</option>
-                        <option value="llama3">llama3</option>
-                        <option value="mistral">mistral</option>
-                        <option value="codellama">codellama</option>
+                        <option value="gpt-4.1">gpt-4.1</option>
+                        <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                        <option value="gpt-4.1-nano">gpt-4.1-nano</option>
                     </select>
                 </div>
                 

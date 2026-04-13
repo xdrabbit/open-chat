@@ -18,6 +18,7 @@ class OpenChat {
         this.loadModels();
         this.loadConversationHistory();
         this.loadConversationStats();
+        this.checkRAGStatus();
         this.checkComfyUIStatus();
     }
 
@@ -43,6 +44,7 @@ class OpenChat {
         
         // Status indicators
         this.ollamaStatus = document.getElementById('ollama-status');
+        this.modelProviderLabel = document.getElementById('model-provider-label');
         this.ttsStatus = document.getElementById('tts-status');
         this.sttStatus = document.getElementById('stt-status');
         this.ttsProvider = document.getElementById('tts-provider');
@@ -171,11 +173,18 @@ class OpenChat {
         try {
             const response = await fetch(`${this.apiBase}/health`);
             const health = await response.json();
+            const provider = health.model_provider || 'ai';
+            const providerConnected = (
+                health.provider_connected !== undefined
+                    ? health.provider_connected
+                    : health.ollama_connected
+            );
             
-            this.updateStatus('ollama', health.ollama_connected);
+            this.updateStatus('ollama', providerConnected);
             this.updateStatus('tts', health.services.includes('tts-elevenlabs') || health.services.includes('tts-local'));
             this.updateStatus('stt', health.services.includes('stt'));
             
+            this.modelProviderLabel.textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
             this.ttsProvider.textContent = `TTS (${health.tts_provider})`;
             
             // Set TTS selector based on current provider
@@ -227,7 +236,9 @@ class OpenChat {
             });
             
             // Set default voice
-            this.voiceSelect.value = config.ELEVENLABS_VOICE_ID || data.voices[0]?.id;
+            if (data.voices.length > 0) {
+                this.voiceSelect.value = data.voices[0].id;
+            }
             
         } catch (error) {
             console.error('Failed to load voices:', error);
@@ -263,7 +274,7 @@ class OpenChat {
             
             // Set default model
             if (data.models && data.models.length > 0) {
-                this.modelSelect.value = data.models[0];
+                this.modelSelect.value = data.default_model || data.models[0];
             }
             
             // Update image button availability
@@ -288,7 +299,15 @@ class OpenChat {
             
             // Add conversation history
             data.messages.forEach(msg => {
-                this.addMessage(msg.content, msg.role, msg.audio_file, new Date(msg.timestamp));
+                this.addMessage(
+                    msg.content,
+                    msg.role,
+                    msg.audio_file,
+                    new Date(msg.timestamp),
+                    false,
+                    null,
+                    msg.metadata?.rag_sources || []
+                );
             });
             
         } catch (error) {
@@ -349,7 +368,15 @@ class OpenChat {
             const data = await response.json();
             
             // Add assistant response to UI
-            this.addMessage(data.response, 'assistant', data.audio_file, new Date(data.timestamp));
+            this.addMessage(
+                data.response,
+                'assistant',
+                data.audio_file,
+                new Date(data.timestamp),
+                false,
+                null,
+                data.rag_sources || []
+            );
             
             // Handle AI-generated image if present
             if (data.generated_image) {
@@ -368,8 +395,9 @@ class OpenChat {
 
         } catch (error) {
             console.error('Chat error:', error);
+            const providerName = this.modelProviderLabel?.textContent || 'AI provider';
             this.addMessage(
-                `Sorry, I encountered an error: ${error.message}. Please check if Ollama is running and try again.`,
+                `Sorry, I encountered an error: ${error.message}. Please check ${providerName} configuration and try again.`,
                 'assistant',
                 null,
                 null,
@@ -528,7 +556,7 @@ class OpenChat {
         }
     }
 
-    addMessage(content, role, audioFile = null, timestamp = null, isError = false, imageFile = null) {
+    addMessage(content, role, audioFile = null, timestamp = null, isError = false, imageFile = null, ragSources = []) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}`;
         
@@ -550,6 +578,29 @@ class OpenChat {
         const textDiv = document.createElement('div');
         textDiv.textContent = content;
         contentDiv.appendChild(textDiv);
+
+        if (role === 'assistant' && ragSources.length > 0) {
+            const sourcesDiv = document.createElement('div');
+            sourcesDiv.className = 'rag-sources';
+
+            const sourcesLabel = document.createElement('div');
+            sourcesLabel.className = 'rag-sources-label';
+            sourcesLabel.textContent = 'Knowledge base sources';
+            sourcesDiv.appendChild(sourcesLabel);
+
+            ragSources.forEach((source) => {
+                const sourceCard = document.createElement('div');
+                sourceCard.className = 'rag-source-card';
+                sourceCard.innerHTML = `
+                    <div class="rag-source-title">[${source.source_id}] ${source.filename}</div>
+                    <div class="rag-source-meta">Chunk ${source.chunk_index + 1}/${source.total_chunks} • Score ${Number(source.similarity).toFixed(2)}</div>
+                    <div class="rag-source-snippet">${source.snippet}</div>
+                `;
+                sourcesDiv.appendChild(sourceCard);
+            });
+
+            contentDiv.appendChild(sourcesDiv);
+        }
         
         // Add metadata for assistant messages
         if (role === 'assistant') {
@@ -822,8 +873,9 @@ class OpenChat {
         const documents = stats.unique_documents || 0;
         const chunks = stats.total_chunks || 0;
         const coverage = Math.round((stats.embedding_coverage || 0) * 100);
-        
-        this.ragStats.textContent = `${documents} documents, ${chunks} chunks, ${coverage}% embedded`;
+        const personaMemories = stats.persona_memories || 0;
+
+        this.ragStats.textContent = `${documents} documents, ${chunks} chunks, ${coverage}% embedded, ${personaMemories} personality memories`;
     }
 
     async handleFileUpload(droppedFiles = null) {
@@ -887,8 +939,44 @@ class OpenChat {
         const result = await response.json();
         
         // Add system message about upload
+        let uploadMessage = `📚 Document "${file.name}" has been added to my knowledge base. I can now answer questions based on its content!`;
+
+        if (result.imported_threads) {
+            uploadMessage = `📚 Imported ${result.imported_threads} ChatGPT conversation thread${result.imported_threads === 1 ? '' : 's'} from "${file.name}".`;
+            if (result.personality_memories_created) {
+                uploadMessage += ` ${result.personality_memories_created} thread${result.personality_memories_created === 1 ? '' : 's'} contributed distilled personality memory.`;
+            }
+            if (result.legal_sensitive_threads) {
+                uploadMessage += ` ${result.legal_sensitive_threads} thread${result.legal_sensitive_threads === 1 ? '' : 's'} stayed in exact legal/reference memory only.`;
+            }
+            if (result.skipped_duplicates) {
+                uploadMessage += ` ${result.skipped_duplicates} duplicate thread${result.skipped_duplicates === 1 ? '' : 's'} were skipped.`;
+            }
+            if (result.retention_counts?.distill_only) {
+                uploadMessage += ` ${result.retention_counts.distill_only} thread${result.retention_counts.distill_only === 1 ? '' : 's'} were stored as distill-only.`;
+            }
+            if (result.retention_counts?.exact_reference) {
+                uploadMessage += ` ${result.retention_counts.exact_reference} thread${result.retention_counts.exact_reference === 1 ? '' : 's'} were kept for exact reference.`;
+            }
+        } else if (result.skipped_duplicate) {
+            uploadMessage = `📚 Document "${file.name}" matches an existing import and was skipped as a duplicate.`;
+        } else if (result.personality_memory_created) {
+            uploadMessage = `📚 Document "${file.name}" was indexed as ${result.archive_type || 'archive material'} and distilled into background personality memory without retaining raw text for retrieval.`;
+        } else if (result.legal_sensitivity) {
+            uploadMessage = `📚 Document "${file.name}" was indexed as ${result.archive_type || 'reference material'} and quarantined to exact reference memory so it does not color personality.`;
+        } else if (result.archive_document_created) {
+            const retentionText = result.retention_mode === 'distill_only'
+                ? ' as distill-only memory'
+                : ' for exact reference';
+            uploadMessage = `📚 Document "${file.name}" was indexed as ${result.archive_type || 'reference material'}${result.era_label ? ` in era "${result.era_label}"` : ''}${retentionText}.`;
+        }
+
+        if (result.formative_moments_created) {
+            uploadMessage += ` I also preserved ${result.formative_moments_created} formative moment${result.formative_moments_created === 1 ? '' : 's'}.`;
+        }
+
         this.addMessage(
-            `📚 Document "${file.name}" has been added to my knowledge base. I can now answer questions based on its content!`,
+            uploadMessage,
             'assistant',
             null,
             new Date()
@@ -913,7 +1001,7 @@ class OpenChat {
         this.uploadProgress.style.display = 'none';
         this.uploadProgressBar.style.width = '0%';
         this.fileDropZone.querySelector('.drop-text').textContent = 'Drag & drop documents here';
-        this.fileDropZone.querySelector('.drop-hint').textContent = 'or click to browse (.txt, .md, .pdf, .docx)';
+        this.fileDropZone.querySelector('.drop-hint').textContent = 'or click to browse (.txt, .md, .pdf, .docx, .json)';
     }
 
     // Image handling methods
@@ -977,7 +1065,7 @@ class OpenChat {
             const response = await fetch(`${this.apiBase}/comfyui/status`);
             const status = await response.json();
             
-            this.updateComfyUIStatus(status.connected, status.system_info);
+            this.updateComfyUIStatus(status.connected, status.system_info, status.base_url);
             this.updateGenerateButton();
         } catch (error) {
             console.error('Error checking ComfyUI status:', error);
@@ -985,19 +1073,20 @@ class OpenChat {
         }
     }
 
-    updateComfyUIStatus(connected, systemInfo = null) {
+    updateComfyUIStatus(connected, systemInfo = null, baseUrl = null) {
         if (connected) {
             this.comfyuiStatus.textContent = 'Connected';
             this.comfyuiStatus.classList.add('connected');
             
             if (systemInfo) {
                 const version = systemInfo.comfyui_version || 'Unknown';
-                this.comfyuiStatus.title = `ComfyUI v${version} - Ready for image generation`;
+                const endpointSuffix = baseUrl ? ` at ${baseUrl}` : '';
+                this.comfyuiStatus.title = `ComfyUI v${version}${endpointSuffix} - Ready for local image generation`;
             }
         } else {
             this.comfyuiStatus.textContent = 'Disconnected';
             this.comfyuiStatus.classList.remove('connected');
-            this.comfyuiStatus.title = 'ComfyUI not available';
+            this.comfyuiStatus.title = baseUrl ? `ComfyUI not available at ${baseUrl}` : 'ComfyUI not available';
         }
     }
 

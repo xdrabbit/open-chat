@@ -1,6 +1,10 @@
 # Configuration
 .env
 .env.local
+.codex
+.codex/
+research_vault.key
+backend/research_vault.key
 
 # Audio files
 temp_audio/
