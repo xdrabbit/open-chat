@@ -273,9 +273,58 @@ class ArchiveService:
             return text
         return text[: max_chars - 3].rstrip() + "..."
 
+    def _infer_style_markers(self, text: str) -> Dict[str, Any]:
+        lowered = text.lower()
+        words = [word for word in text.split() if word.strip()]
+        word_count = len(words)
+        sentence_count = max(1, sum(text.count(punct) for punct in ".!?"))
+        avg_sentence_words = word_count / sentence_count if sentence_count else word_count
+
+        playful_hits = sum(lowered.count(token) for token in ["haha", "lol", "playful", "funny", "joke", "laugh"])
+        reflective_hits = sum(lowered.count(token) for token in ["feel", "felt", "meaning", "why", "understand", "value", "trust"])
+        technical_hits = sum(lowered.count(token) for token in ["code", "model", "system", "python", "api", "memory", "design"])
+        relational_hits = sum(lowered.count(token) for token in ["we", "us", "together", "you", "relationship", "trust", "care"])
+        question_count = text.count("?")
+
+        style_labels: List[str] = []
+        if avg_sentence_words <= 14:
+            style_labels.append("direct")
+        else:
+            style_labels.append("reflective")
+
+        if question_count >= 3:
+            style_labels.append("inquisitive")
+        if technical_hits >= 3:
+            style_labels.append("technical")
+        if reflective_hits >= 3:
+            style_labels.append("emotionally explicit")
+        if playful_hits >= 2:
+            style_labels.append("playful")
+        if relational_hits >= 3:
+            style_labels.append("relational")
+
+        assistant_stance: List[str] = []
+        if "technical" in style_labels:
+            assistant_stance.append("act like a capable collaborator who can reason through details")
+        if "inquisitive" in style_labels:
+            assistant_stance.append("engage with the user's questions instead of flattening them")
+        if "emotionally explicit" in style_labels or "relational" in style_labels:
+            assistant_stance.append("maintain warmth and continuity without becoming sentimental")
+        if "playful" in style_labels:
+            assistant_stance.append("allow some wit when the moment invites it")
+        if not assistant_stance:
+            assistant_stance.append("stay direct, grounded, and personally attentive")
+
+        return {
+            "style_labels": style_labels,
+            "assistant_stance": assistant_stance,
+            "avg_sentence_words": round(avg_sentence_words, 1),
+        }
+
     def build_personality_profile_fallback(
         self,
         analysis: Dict[str, Any],
+        text: str = "",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Synthesize a usable persona profile when the model omits one."""
@@ -288,27 +337,48 @@ class ArchiveService:
         dynamics = [str(item).strip() for item in (analysis.get("relationship_dynamics") or []) if str(item).strip()][:5]
         human_state = [str(item).strip() for item in (analysis.get("human_state") or []) if str(item).strip()][:5]
         model_observations = [str(item).strip() for item in (analysis.get("model_observations") or []) if str(item).strip()][:5]
+        formative_moments = analysis.get("formative_moments") or []
         era_label = metadata.get("era_label") or analysis.get("era_label")
+        style_markers = self._infer_style_markers(text)
+
+        generic_summaries = {
+            "Imported archive chat from",
+            "Imported mixed archive from",
+            "Imported legal reference from",
+            "Imported reference document from",
+        }
+        if any(summary.startswith(prefix) for prefix in generic_summaries):
+            summary = ""
 
         lines: List[str] = []
+        lines.append("Continuity profile for background personality guidance:")
+
+        if style_markers["style_labels"]:
+            lines.append("Tone baseline: " + ", ".join(style_markers["style_labels"]) + ".")
         if summary:
-            lines.append(f"Background: {summary}")
+            lines.append(f"Relational backdrop: {summary}")
         if themes:
-            lines.append("Recurring themes: " + ", ".join(themes) + ".")
+            lines.append("Recurring territory: " + ", ".join(themes) + ".")
         if dynamics:
-            lines.append("Interaction style: " + "; ".join(dynamics) + ".")
+            lines.append("Conversation rhythm: " + "; ".join(dynamics) + ".")
         if human_state:
-            lines.append("User state markers: " + "; ".join(human_state) + ".")
+            lines.append("User-side patterning: " + "; ".join(human_state) + ".")
         if model_observations:
-            lines.append("Model role markers: " + "; ".join(model_observations) + ".")
+            lines.append("Assistant role cues: " + "; ".join(model_observations) + ".")
+        if formative_moments:
+            moment_titles = [moment.get("title", "").strip() for moment in formative_moments if moment.get("title")]
+            if moment_titles:
+                lines.append("Memorable anchors: " + "; ".join(moment_titles[:3]) + ".")
+        if style_markers["assistant_stance"]:
+            lines.append("Preferred assistant stance: " + "; ".join(style_markers["assistant_stance"]) + ".")
         if era_label:
             lines.append(f"Context era: {era_label}.")
 
-        if not lines:
+        if len(lines) == 1:
             return ""
 
         lines.append(
-            "Use this as background tone and continuity guidance only, not as exact factual memory or legal authority."
+            "Use this as background tone and continuity guidance only. Do not treat it as exact factual memory or legal authority."
         )
         return "\n".join(lines)
 
@@ -411,7 +481,7 @@ class ArchiveService:
         )
         analysis = self.apply_manual_direction(analysis, metadata)
         if analysis.get("should_influence_personality") and not analysis.get("personality_profile", "").strip():
-            analysis["personality_profile"] = self.build_personality_profile_fallback(analysis, metadata)
+            analysis["personality_profile"] = self.build_personality_profile_fallback(analysis, text=text, metadata=metadata)
         retention_mode = metadata.get("retention_mode") or analysis.get("retention_mode") or self.select_retention_mode(analysis)
 
         return {
