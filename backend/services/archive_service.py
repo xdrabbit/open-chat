@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 from collections import Counter
 from datetime import datetime
@@ -273,6 +274,23 @@ class ArchiveService:
             return text
         return text[: max_chars - 3].rstrip() + "..."
 
+    def _extract_recurring_vocabulary(self, text: str, limit: int = 6) -> List[str]:
+        stopwords = {
+            "about", "after", "again", "also", "always", "and", "because", "been", "being",
+            "between", "both", "could", "doing", "from", "have", "just", "like", "more",
+            "much", "need", "other", "really", "some", "than", "that", "their", "them",
+            "then", "there", "these", "they", "this", "those", "through", "very", "what",
+            "when", "where", "which", "while", "with", "would", "your", "you're", "into",
+            "over", "under", "still", "only", "make", "made", "want", "wants", "have",
+            "having", "were", "been", "said", "says", "tell", "told", "know", "knew",
+            "think", "thinking", "feel", "feels", "felt", "user", "assistant", "archive",
+            "conversation", "document", "imported", "reference", "legal", "court", "lawyer",
+            "divorce", "order", "hearing", "complaint", "defendant", "plaintiff",
+        }
+        tokens = re.findall(r"[a-zA-Z][a-zA-Z'-]{3,}", text.lower())
+        counts = Counter(token for token in tokens if token not in stopwords)
+        return [word for word, _ in counts.most_common(limit)]
+
     def _infer_style_markers(self, text: str) -> Dict[str, Any]:
         lowered = text.lower()
         words = [word for word in text.split() if word.strip()]
@@ -284,7 +302,11 @@ class ArchiveService:
         reflective_hits = sum(lowered.count(token) for token in ["feel", "felt", "meaning", "why", "understand", "value", "trust"])
         technical_hits = sum(lowered.count(token) for token in ["code", "model", "system", "python", "api", "memory", "design"])
         relational_hits = sum(lowered.count(token) for token in ["we", "us", "together", "you", "relationship", "trust", "care"])
+        reassurance_hits = sum(lowered.count(token) for token in ["okay", "safe", "steady", "breathe", "calm", "grounded", "gentle"])
+        urgency_hits = sum(lowered.count(token) for token in ["now", "urgent", "must", "need", "asap", "immediately"])
+        collaborative_hits = sum(lowered.count(token) for token in ["build", "debug", "figure", "solve", "work through", "design", "together"])
         question_count = text.count("?")
+        exclamation_count = text.count("!")
 
         style_labels: List[str] = []
         if avg_sentence_words <= 14:
@@ -302,6 +324,8 @@ class ArchiveService:
             style_labels.append("playful")
         if relational_hits >= 3:
             style_labels.append("relational")
+        if collaborative_hits >= 2:
+            style_labels.append("collaborative")
 
         assistant_stance: List[str] = []
         if "technical" in style_labels:
@@ -315,10 +339,42 @@ class ArchiveService:
         if not assistant_stance:
             assistant_stance.append("stay direct, grounded, and personally attentive")
 
+        if reassurance_hits >= 2:
+            reassurance_style = "steady reassurance is welcome, but it should stay grounded and unsentimental"
+        elif urgency_hits >= 3:
+            reassurance_style = "skip excessive soothing and move quickly toward clarity or action"
+        else:
+            reassurance_style = "use reassurance sparingly and only when it adds real stability"
+
+        if collaborative_hits >= 2 or technical_hits >= 3:
+            collaboration_mode = "treat the interaction like a working session with shared problem-solving"
+        elif relational_hits >= 3 and reflective_hits >= 3:
+            collaboration_mode = "balance companionship and reflection with practical forward motion"
+        else:
+            collaboration_mode = "stay engaged as a thoughtful counterpart rather than a detached tool"
+
+        if playful_hits >= 2 and exclamation_count <= 3:
+            humor_tolerance = "light wit is welcome when it feels earned"
+        elif urgency_hits >= 3:
+            humor_tolerance = "keep humor restrained when the user is trying to get traction"
+        else:
+            humor_tolerance = "humor is optional and should never undercut seriousness"
+
+        if avg_sentence_words <= 12:
+            response_shape = "favor concise replies and clean steps"
+        elif avg_sentence_words >= 20:
+            response_shape = "allow layered explanation and reflective pacing when useful"
+        else:
+            response_shape = "balance clarity with some depth"
+
         return {
             "style_labels": style_labels,
             "assistant_stance": assistant_stance,
             "avg_sentence_words": round(avg_sentence_words, 1),
+            "reassurance_style": reassurance_style,
+            "collaboration_mode": collaboration_mode,
+            "humor_tolerance": humor_tolerance,
+            "response_shape": response_shape,
         }
 
     def build_personality_profile_fallback(
@@ -340,6 +396,7 @@ class ArchiveService:
         formative_moments = analysis.get("formative_moments") or []
         era_label = metadata.get("era_label") or analysis.get("era_label")
         style_markers = self._infer_style_markers(text)
+        recurring_vocabulary = self._extract_recurring_vocabulary(text)
 
         generic_summaries = {
             "Imported archive chat from",
@@ -355,10 +412,13 @@ class ArchiveService:
 
         if style_markers["style_labels"]:
             lines.append("Tone baseline: " + ", ".join(style_markers["style_labels"]) + ".")
+        lines.append("Response shape: " + style_markers["response_shape"] + ".")
         if summary:
             lines.append(f"Relational backdrop: {summary}")
         if themes:
             lines.append("Recurring territory: " + ", ".join(themes) + ".")
+        if recurring_vocabulary:
+            lines.append("Recurring motifs or vocabulary: " + ", ".join(recurring_vocabulary) + ".")
         if dynamics:
             lines.append("Conversation rhythm: " + "; ".join(dynamics) + ".")
         if human_state:
@@ -371,6 +431,9 @@ class ArchiveService:
                 lines.append("Memorable anchors: " + "; ".join(moment_titles[:3]) + ".")
         if style_markers["assistant_stance"]:
             lines.append("Preferred assistant stance: " + "; ".join(style_markers["assistant_stance"]) + ".")
+        lines.append("Reassurance style: " + style_markers["reassurance_style"] + ".")
+        lines.append("Collaboration mode: " + style_markers["collaboration_mode"] + ".")
+        lines.append("Humor tolerance: " + style_markers["humor_tolerance"] + ".")
         if era_label:
             lines.append(f"Context era: {era_label}.")
 
