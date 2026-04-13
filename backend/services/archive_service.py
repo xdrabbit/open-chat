@@ -267,6 +267,51 @@ class ArchiveService:
             "formative_moments": [],
         }
 
+    def _compact_text(self, value: Optional[str], max_chars: int = 280) -> str:
+        text = " ".join((value or "").split())
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 3].rstrip() + "..."
+
+    def build_personality_profile_fallback(
+        self,
+        analysis: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Synthesize a usable persona profile when the model omits one."""
+        metadata = metadata or {}
+        if analysis.get("legal_sensitivity"):
+            return ""
+
+        summary = self._compact_text(analysis.get("summary", ""), 220)
+        themes = [str(item).strip() for item in (analysis.get("themes") or []) if str(item).strip()][:6]
+        dynamics = [str(item).strip() for item in (analysis.get("relationship_dynamics") or []) if str(item).strip()][:5]
+        human_state = [str(item).strip() for item in (analysis.get("human_state") or []) if str(item).strip()][:5]
+        model_observations = [str(item).strip() for item in (analysis.get("model_observations") or []) if str(item).strip()][:5]
+        era_label = metadata.get("era_label") or analysis.get("era_label")
+
+        lines: List[str] = []
+        if summary:
+            lines.append(f"Background: {summary}")
+        if themes:
+            lines.append("Recurring themes: " + ", ".join(themes) + ".")
+        if dynamics:
+            lines.append("Interaction style: " + "; ".join(dynamics) + ".")
+        if human_state:
+            lines.append("User state markers: " + "; ".join(human_state) + ".")
+        if model_observations:
+            lines.append("Model role markers: " + "; ".join(model_observations) + ".")
+        if era_label:
+            lines.append(f"Context era: {era_label}.")
+
+        if not lines:
+            return ""
+
+        lines.append(
+            "Use this as background tone and continuity guidance only, not as exact factual memory or legal authority."
+        )
+        return "\n".join(lines)
+
     async def analyze_document(
         self,
         filename: str,
@@ -365,6 +410,8 @@ class ArchiveService:
             },
         )
         analysis = self.apply_manual_direction(analysis, metadata)
+        if analysis.get("should_influence_personality") and not analysis.get("personality_profile", "").strip():
+            analysis["personality_profile"] = self.build_personality_profile_fallback(analysis, metadata)
         retention_mode = metadata.get("retention_mode") or analysis.get("retention_mode") or self.select_retention_mode(analysis)
 
         return {
