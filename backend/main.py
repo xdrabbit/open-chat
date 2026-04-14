@@ -5,7 +5,6 @@ from fastapi.responses import FileResponse
 import uvicorn
 import logging
 from datetime import datetime
-import hashlib
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +22,10 @@ from services.conversation_service import ConversationService
 from services.rag_service import create_rag_service, enhance_chat_with_rag
 from services.vision_service import VisionService
 from services.comfyui_service import ComfyUIService
+from services.chat_orchestrator import ChatOrchestrator
+from services.draw_orchestrator import DrawOrchestrator
+from services.policy_service import PolicyService
+from services.ingest_orchestrator import IngestOrchestrator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +59,7 @@ archive_service = ArchiveService(rag_service.vector_store.db_path, analysis_serv
 vision_service = VisionService()
 comfyui_service = ComfyUIService()
 research_vault_service = ResearchVaultService(rag_service.vector_store.db_path)
+policy_service = PolicyService()
 
 
 def get_default_chat_model() -> str:
@@ -72,54 +76,25 @@ def get_active_chat_service():
     return ollama_service
 
 
-def format_rag_sources(raw_sources):
-    """Convert retrieved source dicts to API-safe response objects."""
-    return [
-        RAGSource(
-            source_id=source["source_id"],
-            filename=source["filename"],
-            source=source["source"],
-            chunk_index=source["chunk_index"],
-            total_chunks=source["total_chunks"],
-            similarity=source["similarity"],
-            snippet=source["snippet"],
-        )
-        for source in raw_sources
-    ]
+draw_orchestrator = DrawOrchestrator(comfyui_service, conversation_service, research_vault_service)
+chat_orchestrator = ChatOrchestrator(
+    conversation_service,
+    rag_service,
+    tts_service,
+    research_vault_service,
+    draw_orchestrator,
+    policy_service,
+    get_default_chat_model,
+    get_active_chat_service,
+)
+ingest_orchestrator = IngestOrchestrator(
+    rag_service,
+    archive_service,
+    research_vault_service,
+    policy_service,
+    parse_chatgpt_export_file,
+)
 
-
-def append_rag_citation_summary(response_text: str, rag_sources):
-    """Ensure source references are visible even if the model omits them inline."""
-    if not rag_sources:
-        return response_text
-
-    summary_lines = ["", "Sources:"]
-    for source in rag_sources:
-        summary_lines.append(
-            f"[{source.source_id}] {source.filename} (chunk {source.chunk_index + 1}/{source.total_chunks})"
-        )
-
-    return f"{response_text.rstrip()}\n" + "\n".join(summary_lines)
-
-
-def merge_prompt_contexts(user_query: str, personality_context: str, rag_query: str):
-    """Combine background personality memory with exact retrieval context."""
-    if personality_context and rag_query != user_query:
-        return f"{personality_context}\n\n{rag_query}"
-    if personality_context:
-        return f"{personality_context}\n\nUser question: {user_query}"
-    return rag_query
-
-
-def should_attach_private_context_to_chat() -> bool:
-    """False when remote OpenAI should only receive the user's live text input."""
-    if (
-        config.MODEL_PROVIDER == "openai"
-        and config.CLOUD_TEXT_ONLY
-        and not config.is_lan_safe_url(config.OPENAI_BASE_URL)
-    ):
-        return False
-    return True
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -259,118 +234,7 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Process chat message and return response"""
     try:
-        if should_attach_private_context_to_chat():
-            conversation_history = await conversation_service.get_recent_messages(6)
-            rag_context = await enhance_chat_with_rag(request.message, rag_service, conversation_history)
-            personality_context = await rag_service.get_persona_context()
-            enhanced_query = merge_prompt_contexts(request.message, personality_context, rag_context["enhanced_query"])
-            rag_sources = format_rag_sources(rag_context["sources"])
-        else:
-            enhanced_query = request.message
-            rag_sources = []
-        
-        model = request.model or get_default_chat_model()
-        active_service = get_active_chat_service()
-        
-        chat_result = await active_service.chat_with_functions(
-            enhanced_query, 
-            model,
-            temperature=getattr(request, 'temperature', 0.7),
-            top_p=getattr(request, 'top_p', 0.9)
-        )
-        
-        response_text = chat_result.get("response", "")
-        response_text = append_rag_citation_summary(response_text, rag_sources)
-        ai_initiated = chat_result.get("ai_initiated", False)
-        
-        # Handle AI-initiated image generation
-        generated_image = None
-        if ai_initiated and "function_call" in chat_result:
-            function_call = chat_result["function_call"]
-            if function_call["name"] == "generate_image":
-                try:
-                    args = function_call["arguments"]
-                    logger.info(f"🎨 AI-initiated image generation: {args.get('reason', 'Creative enhancement')}")
-                    
-                    # Generate image using intelligent ComfyUI selection
-                    image_filename = await comfyui_service.generate_image(
-                        prompt=args["prompt"],
-                        style=args.get("style", "artistic")
-                        # Let intelligent system handle negative_prompt, dimensions, steps, cfg
-                    )
-                    
-                    if image_filename:
-                        # Create URL for the generated image
-                        image_url = f"/temp_audio/{image_filename}"
-                        generated_image = GeneratedImage(
-                            url=image_url,
-                            prompt=args["prompt"],
-                            reason=args.get("reason", "AI creative enhancement"),
-                            style=args.get("style", "artistic"),
-                            ai_initiated=True
-                        )
-                        logger.info(f"✅ AI successfully generated {args.get('style', 'artistic')} image: {image_url}")
-                    else:
-                        logger.error("AI-initiated image generation failed: No image returned from ComfyUI")
-                        
-                except Exception as e:
-                    logger.error(f"Error in AI-initiated image generation: {e}")
-        
-        # Save user message (original, not enhanced)
-        user_msg = ChatMessage(
-            role="user",
-            content=request.message,
-            timestamp=datetime.now()
-        )
-        await conversation_service.save_message(user_msg)
-        
-        # Generate TTS audio for the response
-        audio_file = None
-        try:
-            audio_file = await tts_service.generate_speech(response_text, request.voice_id)
-        except Exception as e:
-            logger.warning(f"TTS generation failed: {e}")
-        
-        # Save assistant message
-        assistant_msg = ChatMessage(
-            role="assistant",
-            content=response_text,
-            timestamp=datetime.now(),
-            audio_file=audio_file,
-            metadata={"rag_sources": [source.model_dump() for source in rag_sources]} if rag_sources else None
-        )
-        await conversation_service.save_message(assistant_msg)
-
-        await research_vault_service.append_entry(
-            "chat_exchange",
-            {
-                "user_message": request.message,
-                "assistant_response": response_text,
-                "provider": config.MODEL_PROVIDER,
-                "model": model,
-                "cloud_text_only": config.CLOUD_TEXT_ONLY,
-                "rag_source_count": len(rag_sources),
-                "generated_image": generated_image.model_dump() if generated_image else None,
-                "timestamp": datetime.now().isoformat(),
-            },
-            model_name=model,
-        )
-        
-        # Build response
-        response = ChatResponse(
-            response=response_text,
-            model=model,
-            timestamp=datetime.now(),
-            audio_file=audio_file,
-            rag_sources=rag_sources or None
-        )
-        
-        # Add generated image to response if available
-        if generated_image:
-            response.generated_image = generated_image
-        
-        return response
-        
+        return await chat_orchestrator.handle_chat(request, enhance_chat_with_rag)
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -381,69 +245,7 @@ async def chat_dream_draw(request: ChatRequest):
     try:
         model = request.model or get_default_chat_model()
         active_service = get_active_chat_service()
-
-        dreamed = await active_service.dream_image_request(request.message, model)
-        image_filename = await comfyui_service.generate_image(
-            prompt=dreamed["prompt"],
-            negative_prompt=dreamed.get("negative_prompt", ""),
-            style=dreamed.get("style", "artistic"),
-        )
-
-        if not image_filename:
-            raise HTTPException(status_code=500, detail="Local ComfyUI generation failed")
-
-        response_text = (
-            "Dreamed prompt sent to local ComfyUI.\n\n"
-            f"{dreamed.get('reason', 'Prepared for rendering.')}"
-        )
-
-        generated_image = GeneratedImage(
-            url=f"/temp_audio/{image_filename}",
-            prompt=dreamed["prompt"],
-            reason=dreamed.get("reason", "Dreamed locally and rendered with ComfyUI."),
-            style=dreamed.get("style", "artistic"),
-            ai_initiated=True,
-        )
-
-        user_msg = ChatMessage(
-            role="user",
-            content=f"/draw {request.message}",
-            timestamp=datetime.now()
-        )
-        await conversation_service.save_message(user_msg)
-
-        assistant_msg = ChatMessage(
-            role="assistant",
-            content=response_text,
-            timestamp=datetime.now(),
-            metadata={
-                "generated_image": generated_image.model_dump(),
-                "image_command": "dream_draw",
-            },
-        )
-        await conversation_service.save_message(assistant_msg)
-
-        await research_vault_service.append_entry(
-            "dream_draw",
-            {
-                "user_message": request.message,
-                "dream_prompt": dreamed["prompt"],
-                "reason": dreamed.get("reason"),
-                "style": dreamed.get("style"),
-                "provider": config.MODEL_PROVIDER,
-                "model": model,
-                "timestamp": datetime.now().isoformat(),
-            },
-            model_name=model,
-        )
-
-        return ChatResponse(
-            response=response_text,
-            model=model,
-            timestamp=datetime.now(),
-            generated_image=generated_image,
-            rag_sources=[],
-        )
+        return await draw_orchestrator.run_dream_draw(request, model, active_service)
     except HTTPException:
         raise
     except Exception as e:
@@ -466,8 +268,7 @@ async def chat_with_vision(
         if image:
             if (
                 config.MODEL_PROVIDER == "openai"
-                and config.CLOUD_TEXT_ONLY
-                and not config.is_lan_safe_url(config.OPENAI_BASE_URL)
+                and not policy_service.allow_remote_image_upload()
             ):
                 raise HTTPException(
                     status_code=400,
@@ -515,12 +316,12 @@ async def chat_with_vision(
             
         else:
             # Regular text chat without image
-            if should_attach_private_context_to_chat():
+            if chat_orchestrator.should_attach_private_context():
                 conversation_history = await conversation_service.get_recent_messages(6)
                 rag_context = await enhance_chat_with_rag(message, rag_service, conversation_history)
-                rag_sources = format_rag_sources(rag_context["sources"])
+                rag_sources = chat_orchestrator.format_rag_sources(rag_context["sources"])
                 personality_context = await rag_service.get_persona_context()
-                enhanced_query = merge_prompt_contexts(message, personality_context, rag_context["enhanced_query"])
+                enhanced_query = chat_orchestrator.merge_prompt_contexts(message, personality_context, rag_context["enhanced_query"])
             else:
                 rag_sources = []
                 enhanced_query = message
@@ -528,7 +329,7 @@ async def chat_with_vision(
                 response_text = await openai_service.generate_response(enhanced_query, selected_model)
             else:
                 response_text = await ollama_service.generate_response(enhanced_query, selected_model)
-            response_text = append_rag_citation_summary(response_text, rag_sources)
+            response_text = chat_orchestrator.append_rag_citation_summary(response_text, rag_sources)
             
             # Save user message
             user_msg = ChatMessage(
@@ -691,236 +492,16 @@ async def upload_document(
     ingest_intent: str = Form("auto"),
 ):
     """Upload and process a document for RAG"""
-    temp_file_path = None
     try:
-        if not rag_service.is_enabled():
-            raise HTTPException(status_code=503, detail="RAG service is not available")
-        
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="No filename provided")
-        
-        # Check file format
-        supported_formats = rag_service.get_supported_formats()
-        file_extension = f".{file.filename.split('.')[-1].lower()}"
-        
-        if file_extension not in supported_formats:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Unsupported file format. Supported: {', '.join(supported_formats)}"
-            )
-        
-        normalized_ingest_intent = (ingest_intent or "auto").strip().lower()
-        if normalized_ingest_intent not in {"auto", "personality", "reference"}:
-            raise HTTPException(status_code=400, detail="ingest_intent must be auto, personality, or reference")
-
-        # Save uploaded file temporarily
-        temp_dir = "temp_documents"
-        os.makedirs(temp_dir, exist_ok=True)
-        safe_filename = Path(file.filename).name
-        temp_file_path = os.path.join(temp_dir, safe_filename)
-        
-        with open(temp_file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-
-        upload_file_hash = hashlib.sha256(content).hexdigest()
-        
-        upload_metadata = {
-            "filename": file.filename,
-            "content_type": file.content_type,
-            "upload_time": datetime.now().isoformat(),
-            "file_hash": upload_file_hash,
-            "manual_direction": normalized_ingest_intent,
-        }
-
-        if file_extension == ".json":
-            threads = parse_chatgpt_export_file(temp_file_path)
-            if not threads:
-                raise HTTPException(status_code=400, detail="Unsupported JSON file. Expected a ChatGPT conversations export.")
-
-            imported_threads = 0
-            skipped_duplicates = 0
-            personality_memory_count = 0
-            archive_document_count = 0
-            formative_moments_count = 0
-            legal_sensitive_threads = 0
-            retention_counts = {"distill_only": 0, "exact_reference": 0}
-
-            for thread in threads:
-                thread_source = f"{safe_filename}::{thread['thread_filename']}"
-                thread_metadata = {
-                    **upload_metadata,
-                    "source_kind": "chatgpt_export_thread",
-                    "conversation_title": thread["title"],
-                    "archive_type": thread["archive_type"],
-                    "legal_sensitivity": thread["legal_sensitivity"],
-                    "era_label": thread["era_label"],
-                    "message_count": thread["message_count"],
-                    "evidence_count": thread["evidence_count"],
-                    "participants": thread["participants"],
-                    "create_time": thread["create_time"],
-                    "update_time": thread["update_time"],
-                    "legal_relevance_manifest": thread["legal_relevance_manifest"],
-                    "evidence_manifest": thread["evidence_manifest"],
-                }
-
-                prepared = await archive_service.prepare_document(
-                    filename=thread["thread_filename"],
-                    text=thread["text"],
-                    metadata=thread_metadata,
-                )
-
-                retention_mode = prepared["retention_mode"]
-                retention_counts[retention_mode] = retention_counts.get(retention_mode, 0) + 1
-
-                if not prepared.get("duplicate") and retention_mode == "exact_reference":
-                    success = await rag_service.add_text_document(
-                        thread["text"],
-                        source=thread_source,
-                        metadata={
-                            **thread_metadata,
-                            "filename": thread["thread_filename"],
-                            "retention_mode": retention_mode,
-                            "content_hash": prepared.get("content_hash"),
-                        },
-                    )
-                    if not success:
-                        continue
-
-                archive_result = await archive_service.process_document(
-                    file_path=thread_source,
-                    filename=thread["thread_filename"],
-                    text=thread["text"],
-                    metadata=thread_metadata,
-                    precomputed=prepared,
-                )
-
-                if archive_result.get("skipped_duplicate"):
-                    skipped_duplicates += 1
-                    continue
-
-                await research_vault_service.append_entry(
-                    "archive_ingest",
-                    {
-                        "source_kind": "chatgpt_export_thread",
-                        "parent_filename": file.filename,
-                        "thread_title": thread["title"],
-                        "thread_filename": thread["thread_filename"],
-                        "raw_text": thread["text"],
-                        "analysis": archive_result,
-                        "metadata": thread_metadata,
-                        "timestamp": datetime.now().isoformat(),
-                    },
-                    source_ref=thread_source,
-                    file_hash=archive_result.get("file_hash"),
-                    content_hash=archive_result.get("content_hash"),
-                )
-
-                imported_threads += 1
-                archive_document_count += 1 if archive_result.get("archive_document_created") else 0
-                personality_memory_count += 1 if archive_result.get("personality_memory_created") else 0
-                formative_moments_count += int(archive_result.get("formative_moments_created", 0))
-                legal_sensitive_threads += 1 if archive_result.get("legal_sensitivity") else 0
-
-            if imported_threads == 0 and skipped_duplicates == 0:
-                raise HTTPException(status_code=500, detail="Failed to import any conversations from the ChatGPT export")
-
-            os.remove(temp_file_path)
-            return {
-                "message": f"Imported {imported_threads} conversation threads from '{file.filename}'",
-                "imported_threads": imported_threads,
-                "skipped_duplicates": skipped_duplicates,
-                "archive_document_created": archive_document_count > 0,
-                "archive_documents_created": archive_document_count,
-                "personality_memory_created": personality_memory_count > 0,
-                "personality_memories_created": personality_memory_count,
-                "legal_sensitivity": legal_sensitive_threads > 0,
-                "legal_sensitive_threads": legal_sensitive_threads,
-                "formative_moments_created": formative_moments_count,
-                "archive_type": "chatgpt_export",
-                "era_label": None,
-                "retention_counts": retention_counts,
-                "file_hash": upload_file_hash,
-                "manual_direction": normalized_ingest_intent,
-            }
-
-        extracted_text = await rag_service.extract_document_text(temp_file_path)
-        prepared = await archive_service.prepare_document(
-            filename=file.filename,
-            text=extracted_text,
-            metadata=upload_metadata,
-            raw_bytes=content,
-        )
-        retention_mode = prepared["retention_mode"]
-
-        success = True
-        if not prepared.get("duplicate") and retention_mode == "exact_reference":
-            success = await rag_service.add_document(
-                temp_file_path,
-                metadata={
-                    **upload_metadata,
-                    "retention_mode": retention_mode,
-                    "content_hash": prepared.get("content_hash"),
-                }
-            )
-
-        archive_result = await archive_service.process_document(
-            file_path=temp_file_path,
-            filename=file.filename,
-            text=extracted_text,
-            metadata=upload_metadata,
-            precomputed=prepared,
-        ) if success else {
-            "archive_document_created": False,
-            "personality_memory_created": False,
-            "archive_type": "reference_document",
-            "era_label": None,
-            "legal_sensitivity": False,
-            "formative_moments_created": 0,
-            "retention_mode": retention_mode,
-            "skipped_duplicate": False,
-        }
-
-        os.remove(temp_file_path)
-
-        if success or archive_result.get("skipped_duplicate"):
-            if not archive_result.get("skipped_duplicate"):
-                await research_vault_service.append_entry(
-                    "archive_ingest",
-                    {
-                        "source_kind": "single_document",
-                        "filename": file.filename,
-                        "raw_text": extracted_text,
-                        "analysis": archive_result,
-                        "metadata": upload_metadata,
-                        "timestamp": datetime.now().isoformat(),
-                    },
-                    source_ref=temp_file_path,
-                    file_hash=archive_result.get("file_hash"),
-                    content_hash=archive_result.get("content_hash"),
-                )
-            return {
-                "message": f"Document '{file.filename}' processed successfully",
-                "personality_memory_created": archive_result.get("personality_memory_created", False),
-                "archive_document_created": archive_result.get("archive_document_created", False),
-                "archive_type": archive_result.get("archive_type"),
-                "era_label": archive_result.get("era_label"),
-                "legal_sensitivity": archive_result.get("legal_sensitivity", False),
-                "formative_moments_created": archive_result.get("formative_moments_created", 0),
-                "retention_mode": archive_result.get("retention_mode"),
-                "skipped_duplicate": archive_result.get("skipped_duplicate", False),
-                "duplicate_of": archive_result.get("duplicate_of"),
-                "file_hash": archive_result.get("file_hash"),
-                "content_hash": archive_result.get("content_hash"),
-                "manual_direction": normalized_ingest_intent,
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to process document")
-            
+        return await ingest_orchestrator.handle_upload(file, ingest_intent)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        detail = str(e)
+        status_code = 503 if detail == "RAG service is not available" else 500
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         logger.error(f"Document upload failed: {e}")
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/rag/stats")
