@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 import os
-import sqlite3
 import uuid
 from collections import Counter
 from datetime import datetime
@@ -12,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from cryptography.fernet import Fernet
 
 from config import config
+from .research_memory_service import ResearchMemoryService
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ class ResearchVaultService:
         self.db_path = db_path
         self.enabled = config.RESEARCH_VAULT_ENABLED
         self._fernet: Optional[Fernet] = None
+        self.memory = ResearchMemoryService(db_path)
 
     async def initialize(self):
         if not self.enabled:
@@ -31,29 +32,7 @@ class ResearchVaultService:
 
         self._fernet = Fernet(self._load_or_create_key())
 
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS research_vault_entries (
-                id TEXT PRIMARY KEY,
-                event_type TEXT NOT NULL,
-                source_ref TEXT,
-                file_hash TEXT,
-                content_hash TEXT,
-                model_name TEXT,
-                payload_encrypted BLOB NOT NULL,
-                payload_sha256 TEXT NOT NULL,
-                prev_entry_hash TEXT,
-                entry_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_event_type ON research_vault_entries(event_type)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_research_created_at ON research_vault_entries(created_at)")
-        conn.commit()
-        conn.close()
+        await self.memory.initialize()
 
     def _load_or_create_key(self) -> bytes:
         if config.RESEARCH_VAULT_KEY:
@@ -79,9 +58,6 @@ class ResearchVaultService:
             return path
         return (Path(__file__).resolve().parent.parent / path).resolve()
 
-    def _connection(self):
-        return sqlite3.connect(self.db_path)
-
     def _decrypt_payload(self, encrypted_payload: bytes) -> Dict[str, Any]:
         if not self._fernet:
             return {}
@@ -103,36 +79,21 @@ class ResearchVaultService:
         if not self.enabled:
             return []
 
-        conn = self._connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, event_type, source_ref, file_hash, content_hash, model_name,
-                   payload_encrypted, payload_sha256, prev_entry_hash, entry_hash, created_at
-            FROM research_vault_entries
-            ORDER BY created_at DESC, rowid DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        rows = cursor.fetchall()
-        conn.close()
-
         entries = []
-        for row in rows:
+        for row in self.memory.fetch_recent_entries(limit):
             entries.append(
                 {
-                    "id": row[0],
-                    "event_type": row[1],
-                    "source_ref": row[2],
-                    "file_hash": row[3],
-                    "content_hash": row[4],
-                    "model_name": row[5],
-                    "payload": self._decrypt_payload(row[6]),
-                    "payload_sha256": row[7],
-                    "prev_entry_hash": row[8],
-                    "entry_hash": row[9],
-                    "created_at": row[10],
+                    "id": row["id"],
+                    "event_type": row["event_type"],
+                    "source_ref": row["source_ref"],
+                    "file_hash": row["file_hash"],
+                    "content_hash": row["content_hash"],
+                    "model_name": row["model_name"],
+                    "payload": self._decrypt_payload(row["payload_encrypted"]),
+                    "payload_sha256": row["payload_sha256"],
+                    "prev_entry_hash": row["prev_entry_hash"],
+                    "entry_hash": row["entry_hash"],
+                    "created_at": row["created_at"],
                 }
             )
 
@@ -325,13 +286,6 @@ class ResearchVaultService:
         )
         return {"report": full_report, "sections": sections}
 
-    def _latest_entry_hash(self, cursor) -> Optional[str]:
-        cursor.execute(
-            "SELECT entry_hash FROM research_vault_entries ORDER BY created_at DESC, rowid DESC LIMIT 1"
-        )
-        row = cursor.fetchone()
-        return row[0] if row else None
-
     async def append_entry(
         self,
         event_type: str,
@@ -351,9 +305,7 @@ class ResearchVaultService:
         encrypted = self._fernet.encrypt(payload_json.encode("utf-8"))
         entry_id = str(uuid.uuid4())
 
-        conn = self._connection()
-        cursor = conn.cursor()
-        prev_hash = self._latest_entry_hash(cursor)
+        prev_hash = self.memory.latest_entry_hash()
         entry_hash_material = "|".join(
             [
                 entry_id,
@@ -369,65 +321,30 @@ class ResearchVaultService:
         )
         entry_hash = hashlib.sha256(entry_hash_material.encode("utf-8")).hexdigest()
 
-        cursor.execute(
-            """
-            INSERT INTO research_vault_entries (
-                id, event_type, source_ref, file_hash, content_hash, model_name,
-                payload_encrypted, payload_sha256, prev_entry_hash, entry_hash, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                entry_id,
-                event_type,
-                source_ref,
-                file_hash,
-                content_hash,
-                model_name,
-                encrypted,
-                payload_sha256,
-                prev_hash,
-                entry_hash,
-                created_at,
-            ),
+        await self.memory.append_entry(
+            entry_id=entry_id,
+            event_type=event_type,
+            source_ref=source_ref,
+            file_hash=file_hash,
+            content_hash=content_hash,
+            model_name=model_name,
+            payload_encrypted=encrypted,
+            payload_sha256=payload_sha256,
+            prev_entry_hash=prev_hash,
+            entry_hash=entry_hash,
+            created_at=created_at,
         )
-        conn.commit()
-        conn.close()
         return entry_id
 
     def get_stats(self) -> Dict[str, Any]:
         if not self.enabled:
             return {"enabled": False}
 
-        conn = self._connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM research_vault_entries")
-        total_entries = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM research_vault_entries WHERE event_type = 'archive_ingest'")
-        archive_entries = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM research_vault_entries WHERE event_type = 'chat_exchange'")
-        chat_entries = cursor.fetchone()[0]
-        cursor.execute("SELECT MIN(created_at), MAX(created_at) FROM research_vault_entries")
-        oldest, newest = cursor.fetchone()
-        conn.close()
-
-        return {
-            "enabled": True,
-            "total_entries": total_entries,
-            "archive_entries": archive_entries,
-            "chat_entries": chat_entries,
-            "oldest_entry": oldest,
-            "newest_entry": newest,
-        }
+        return {"enabled": True, **self.memory.get_stats()}
 
     async def wipe(self) -> Dict[str, Any]:
         if not self.enabled:
             return {"enabled": False, "deleted_entries": 0}
 
-        conn = self._connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM research_vault_entries")
-        deleted_entries = cursor.fetchone()[0]
-        cursor.execute("DELETE FROM research_vault_entries")
-        conn.commit()
-        conn.close()
+        deleted_entries = await self.memory.wipe()
         return {"enabled": True, "deleted_entries": deleted_entries}
