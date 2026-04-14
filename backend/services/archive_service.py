@@ -655,7 +655,7 @@ class ArchiveService:
             and not analysis.get("legal_sensitivity")
             and analysis.get("personality_profile", "").strip()
         ):
-            personality_memory_created = await self.rag_service.save_persona_memory(
+            personality_memory_created = await self.rag_service.personality_memory.save_memory(
                 source=file_path,
                 filename=filename,
                 content=analysis["personality_profile"],
@@ -719,14 +719,14 @@ class ArchiveService:
         deleted_persona_memories = 0
         if self.rag_service:
             if record["content_hash"]:
-                deleted_rag_chunks = await self.rag_service.delete_documents_by_content_hash(record["content_hash"])
-                deleted_persona_memories = await self.rag_service.delete_persona_memories(
+                deleted_rag_chunks = await self.rag_service.reference_memory.delete_documents_by_content_hash(record["content_hash"])
+                deleted_persona_memories = await self.rag_service.personality_memory.delete_memories(
                     source=record["source_path"],
                     filename=record["filename"],
                     content_hash=record["content_hash"],
                 )
             else:
-                deleted_persona_memories = await self.rag_service.delete_persona_memories(
+                deleted_persona_memories = await self.rag_service.personality_memory.delete_memories(
                     source=record["source_path"],
                     filename=record["filename"],
                 )

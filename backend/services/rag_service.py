@@ -16,6 +16,8 @@ from pathlib import Path
 from datetime import datetime
 from abc import ABC, abstractmethod
 from config import config
+from .reference_memory_service import ReferenceMemoryService
+from .personality_memory_service import PersonalityMemoryService
 
 # Try to import optional dependencies
 try:
@@ -756,6 +758,15 @@ class RAGService:
         self.document_processor = SimpleDocumentProcessor()
         self.vector_store = SQLiteVectorStore(db_path, model_name)
         self.enabled = False
+        self.reference_memory = ReferenceMemoryService(
+            self.document_processor,
+            self.vector_store,
+            lambda: self.enabled,
+        )
+        self.personality_memory = PersonalityMemoryService(
+            self.vector_store,
+            lambda: self.enabled,
+        )
         
     async def initialize(self):
         """Initialize RAG components"""
@@ -769,66 +780,19 @@ class RAGService:
     
     async def add_document(self, file_path: str, metadata: Dict[str, Any] = None) -> bool:
         """Add a document to the RAG system"""
-        if not self.enabled:
-            logger.warning("RAG service is not enabled")
-            return False
-        
-        try:
-            # Process document into chunks
-            chunks = await self.document_processor.process_document(file_path, metadata)
-            
-            if not chunks:
-                logger.warning(f"No chunks generated from {file_path}")
-                return False
-            
-            # Add to vector store
-            success = await self.vector_store.add_documents(chunks)
-            
-            if success:
-                logger.info(f"✅ Successfully added document: {file_path}")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"Failed to add document {file_path}: {e}")
-            return False
+        return await self.reference_memory.add_document(file_path, metadata)
 
     async def add_text_document(self, text: str, source: str, metadata: Dict[str, Any] = None) -> bool:
         """Add pre-extracted text content to the RAG system."""
-        if not self.enabled:
-            logger.warning("RAG service is not enabled")
-            return False
-
-        try:
-            chunks = await self.document_processor.process_text(text, source, metadata)
-            if not chunks:
-                logger.warning(f"No chunks generated from text source {source}")
-                return False
-
-            success = await self.vector_store.add_documents(chunks)
-            if success:
-                logger.info(f"✅ Successfully added text source: {source}")
-            return success
-        except Exception as e:
-            logger.error(f"Failed to add text source {source}: {e}")
-            return False
+        return await self.reference_memory.add_text_document(text, source, metadata)
 
     async def extract_document_text(self, file_path: str) -> str:
         """Extract normalized text for downstream distillation/classification."""
-        try:
-            return await self.document_processor.extract_text(file_path)
-        except AttributeError:
-            file_path_obj = Path(file_path)
-            if file_path_obj.suffix.lower() in ['.txt', '.md']:
-                return file_path_obj.read_text(encoding='utf-8')
-            return ""
-        except Exception as e:
-            logger.error(f"Failed to extract document text for persona distillation: {e}")
-            return ""
+        return await self.reference_memory.extract_document_text(file_path)
 
     async def delete_documents_by_content_hash(self, content_hash: str) -> int:
         """Delete exact-reference chunks matching a content hash."""
-        return await self.vector_store.delete_documents_by_content_hash(content_hash)
+        return await self.reference_memory.delete_documents_by_content_hash(content_hash)
 
     async def delete_persona_memories(
         self,
@@ -838,7 +802,7 @@ class RAGService:
         content_hash: Optional[str] = None,
     ) -> int:
         """Delete persona-memory records matching a source, filename, or content hash."""
-        return await self.vector_store.delete_persona_memories(
+        return await self.personality_memory.delete_memories(
             source=source,
             filename=filename,
             content_hash=content_hash,
@@ -862,45 +826,15 @@ class RAGService:
 
     async def save_persona_memory(self, source: str, filename: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Persist a distilled personality profile."""
-        if not self.enabled or not content.strip():
-            return False
-        return await self.vector_store.save_persona_memory(source, filename, content.strip(), metadata)
+        return await self.personality_memory.save_memory(source, filename, content, metadata)
 
     async def get_persona_context(self, limit: int = 2) -> str:
         """Return a compact behavioral memory block for prompting."""
-        if not self.enabled:
-            return ""
-
-        memories = await self.vector_store.get_persona_memories(limit)
-        if not memories:
-            return ""
-
-        lines = [
-            "Background personality memory:",
-            "Use this only to shape tone, continuity, and relational geography.",
-            "Do not treat it as exact factual authority, and do not let legal/conflict material dominate the response.",
-            "",
-        ]
-
-        for index, memory in enumerate(reversed(memories), start=1):
-            lines.append(f"[Persona {index}] distilled from {memory['filename']}")
-            lines.append(memory["content"])
-            lines.append("")
-
-        return "\n".join(lines).strip()
+        return await self.personality_memory.get_context(limit)
     
     async def search_documents(self, query: str, context_limit: int = 3) -> List[str]:
         """Search for relevant document content"""
-        if not self.enabled:
-            return []
-        
-        try:
-            results = await self.vector_store.search(query, context_limit)
-            return results
-            
-        except Exception as e:
-            logger.error(f"Document search failed: {e}")
-            return []
+        return await self.reference_memory.search_documents(query, context_limit)
 
     def _build_retrieval_query(self, query: str, conversation_history: Optional[List[Dict]] = None) -> str:
         """Blend the current query with recent user context for retrieval."""
@@ -979,29 +913,11 @@ class RAGService:
     
     async def list_documents(self) -> List[Dict[str, Any]]:
         """List all documents in the knowledge base"""
-        if not self.enabled:
-            return []
-        
-        try:
-            # This is a simplified version - in a full implementation,
-            # we'd have a separate documents table
-            stats = self.vector_store.get_stats()
-            return [{
-                'total_documents': stats.get('unique_documents', 0),
-                'total_chunks': stats.get('total_chunks', 0),
-                'embedding_coverage': stats.get('embedding_coverage', 0)
-            }]
-            
-        except Exception as e:
-            logger.error(f"Failed to list documents: {e}")
-            return []
+        return await self.reference_memory.list_documents()
     
     async def delete_document(self, document_id: str) -> bool:
         """Delete a document from the RAG system"""
-        if not self.enabled:
-            return False
-        
-        return await self.vector_store.delete_document(document_id)
+        return await self.reference_memory.delete_document(document_id)
     
     def is_enabled(self) -> bool:
         """Check if RAG is enabled and ready"""
