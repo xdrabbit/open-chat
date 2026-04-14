@@ -375,6 +375,81 @@ async def chat(request: ChatRequest):
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/chat/dream-draw", response_model=ChatResponse)
+async def chat_dream_draw(request: ChatRequest):
+    """Take a direct prompt, have the active model dream a render brief, then send it to ComfyUI."""
+    try:
+        model = request.model or get_default_chat_model()
+        active_service = get_active_chat_service()
+
+        dreamed = await active_service.dream_image_request(request.message, model)
+        image_filename = await comfyui_service.generate_image(
+            prompt=dreamed["prompt"],
+            negative_prompt=dreamed.get("negative_prompt", ""),
+            style=dreamed.get("style", "artistic"),
+        )
+
+        if not image_filename:
+            raise HTTPException(status_code=500, detail="Local ComfyUI generation failed")
+
+        response_text = (
+            "Dreamed prompt sent to local ComfyUI.\n\n"
+            f"{dreamed.get('reason', 'Prepared for rendering.')}"
+        )
+
+        generated_image = GeneratedImage(
+            url=f"/temp_audio/{image_filename}",
+            prompt=dreamed["prompt"],
+            reason=dreamed.get("reason", "Dreamed locally and rendered with ComfyUI."),
+            style=dreamed.get("style", "artistic"),
+            ai_initiated=True,
+        )
+
+        user_msg = ChatMessage(
+            role="user",
+            content=f"/draw {request.message}",
+            timestamp=datetime.now()
+        )
+        await conversation_service.save_message(user_msg)
+
+        assistant_msg = ChatMessage(
+            role="assistant",
+            content=response_text,
+            timestamp=datetime.now(),
+            metadata={
+                "generated_image": generated_image.model_dump(),
+                "image_command": "dream_draw",
+            },
+        )
+        await conversation_service.save_message(assistant_msg)
+
+        await research_vault_service.append_entry(
+            "dream_draw",
+            {
+                "user_message": request.message,
+                "dream_prompt": dreamed["prompt"],
+                "reason": dreamed.get("reason"),
+                "style": dreamed.get("style"),
+                "provider": config.MODEL_PROVIDER,
+                "model": model,
+                "timestamp": datetime.now().isoformat(),
+            },
+            model_name=model,
+        )
+
+        return ChatResponse(
+            response=response_text,
+            model=model,
+            timestamp=datetime.now(),
+            generated_image=generated_image,
+            rag_sources=[],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Dream draw error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/chat-vision", response_model=ChatResponse)
 async def chat_with_vision(
     message: str = Form(...),

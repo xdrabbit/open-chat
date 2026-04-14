@@ -5,6 +5,7 @@
 .codex/
 research_vault.key
 backend/research_vault.key
+.runtime/
 
 # Audio files
 temp_audio/

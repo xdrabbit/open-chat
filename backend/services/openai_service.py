@@ -231,6 +231,69 @@ class OpenAIService:
             logger.error(f"OpenAI generation error: {e}")
             raise
 
+    def _normalize_dream_payload(self, payload: Dict[str, Any], fallback_message: str) -> Dict[str, Any]:
+        prompt = str(payload.get("prompt", "")).strip()
+        if not prompt:
+            prompt, fallback_style = self._create_image_prompt_from_request(fallback_message)
+            payload["style"] = payload.get("style") or fallback_style or "artistic"
+        else:
+            prompt = " ".join(prompt.split())
+            if len(prompt) > 1500:
+                prompt = prompt[:1500].rsplit(" ", 1)[0] + "..."
+
+        payload["prompt"] = prompt
+        payload["style"] = str(payload.get("style") or "artistic").strip() or "artistic"
+        payload["reason"] = str(payload.get("reason") or "Dreamed from the user's prompt and prepared for local ComfyUI rendering.").strip()
+        payload["negative_prompt"] = str(payload.get("negative_prompt") or "").strip()
+        return payload
+
+    async def dream_image_request(self, message: str, model: Optional[str] = None) -> Dict[str, Any]:
+        """Turn a user prompt into a ComfyUI-ready dreamed image brief."""
+        model = model or self.default_model
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You convert a user's image idea into a deliberate local-render prompt for ComfyUI.\n\n"
+                    "Return valid JSON only with keys: prompt, style, reason, negative_prompt.\n"
+                    "Rules:\n"
+                    "- prompt must be vivid, concise, and production-ready for image generation.\n"
+                    "- preserve the user's intent but improve composition, lighting, medium, and atmosphere.\n"
+                    "- do not add safety lectures or conversational filler.\n"
+                    "- keep prompt under 900 characters.\n"
+                    "- style must be one of: realistic, artistic, cartoon, sketch, digital_art, photographic, concept_art, semi_realistic.\n"
+                    "- reason should be one sentence explaining the visual direction.\n"
+                    "- negative_prompt should be brief and optional.\n"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Dream and prepare this for local image rendering:\n\n{message}",
+            },
+        ]
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.7,
+            "top_p": 0.9,
+        }
+
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/chat/completions",
+                headers=self._headers(),
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            parsed = self._extract_json_payload(content)
+            return self._normalize_dream_payload(parsed, message)
+        except Exception as e:
+            logger.error(f"OpenAI dream image error: {e}")
+            return self._normalize_dream_payload({}, message)
+
     async def distill_personality_profile(self, text: str, filename: str, model: Optional[str] = None) -> str:
         """Distill conversation archives into a behavioral memory profile."""
         model = model or "gpt-4.1-mini"

@@ -337,6 +337,10 @@ class OpenChat {
 
         try {
             let response;
+            const isDreamDrawCommand = !hasImage && /^(\/draw|\/dream)\s+/i.test(message);
+            const dreamDrawPrompt = isDreamDrawCommand
+                ? message.replace(/^(\/draw|\/dream)\s+/i, '').trim()
+                : '';
             
             if (hasImage) {
                 // Use vision endpoint with FormData
@@ -349,6 +353,21 @@ class OpenChat {
                 response = await fetch(`${this.apiBase}/chat-vision`, {
                     method: 'POST',
                     body: formData
+                });
+            } else if (isDreamDrawCommand) {
+                const creativitySettings = this.getCreativitySettings();
+                response = await fetch(`${this.apiBase}/chat/dream-draw`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: dreamDrawPrompt,
+                        model: this.modelSelect.value,
+                        voice_id: this.voiceSelect.value,
+                        temperature: creativitySettings.temperature,
+                        top_p: creativitySettings.top_p
+                    })
                 });
             } else {
                 // Use regular text endpoint with creativity controls

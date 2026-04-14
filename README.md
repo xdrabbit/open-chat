@@ -82,7 +82,7 @@ Edit the `.env` file to customize your setup:
 ### Server Settings
 ```env
 HOST=0.0.0.0                    # Server host (0.0.0.0 for all interfaces)
-PORT=8000                       # Server port
+PORT=8282                       # Server port
 DEBUG=True                      # Enable debug mode
 CORS_ORIGINS=http://192.168.0.12:*,http://localhost:*  # Allowed origins
 ```
@@ -168,7 +168,7 @@ DB_PATH=./conversations.db      # SQLite database path
    ```bash
    ./start.sh
    ```
-3. Open your browser to `http://localhost:8000`
+3. Open your browser to `http://localhost:8282`
 
 ### Cross-Network Access
 To access from another device (like Mac Mini → WSL):
@@ -177,7 +177,7 @@ To access from another device (like Mac Mini → WSL):
    HOST=0.0.0.0
    CORS_ORIGINS=http://192.168.0.12:*,http://192.168.0.45:*
    ```
-2. Access from client: `http://192.168.0.45:8000`
+2. Access from client: `http://192.168.0.45:8282`
 
 ### Using the Interface
 - **Text Chat**: Type in the input field and press Enter or click Send
