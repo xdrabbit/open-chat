@@ -504,6 +504,30 @@ async def upload_document(
         logger.error(f"Document upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/rag/status")
+async def get_rag_status():
+    """RAG health check — quick overview of whether retrieval is operational."""
+    try:
+        stats = rag_service.get_stats()
+        return {
+            "enabled": rag_service.is_enabled(),
+            "available": stats.get("total_chunks", 0) > 0,
+            "document_count": stats.get("total_chunks", 0),
+            "collection": "rag_vectors",
+            "embedding_model": stats.get("model"),
+            "persona_memories": stats.get("persona_memories", 0),
+        }
+    except Exception as e:
+        logger.error(f"Error getting RAG status: {e}")
+        return {
+            "enabled": False,
+            "available": False,
+            "document_count": 0,
+            "collection": "rag_vectors",
+            "embedding_model": None,
+            "persona_memories": 0,
+        }
+
 @app.get("/rag/stats")
 async def get_rag_stats():
     """Get RAG system statistics"""
