@@ -54,7 +54,9 @@ class DrawOrchestrator:
 
     async def run_dream_draw(self, request, model: str, active_service) -> ChatResponse:
         """Take a direct prompt, dream a render brief, and send it to ComfyUI."""
-        dreamed = await active_service.dream_image_request(request.message, model)
+        recent = await self.conversation_service.get_recent_messages(8)
+        conversation_history = [{"role": m["role"], "content": m["content"]} for m in recent]
+        dreamed = await active_service.dream_image_request(request.message, model, conversation_history=conversation_history)
         image_filename = await self.comfyui_service.generate_image(
             prompt=dreamed["prompt"],
             negative_prompt=dreamed.get("negative_prompt", ""),

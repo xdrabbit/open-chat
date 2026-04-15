@@ -80,6 +80,8 @@ class OpenAIService:
             is_visual_request = any(keyword in message_lower for keyword in visual_keywords)
 
             if is_visual_request and not _is_internal_call:
+                logger.info(f"Detected visual request: {message}")
+
                 regular_response = await self._chat_without_functions(
                     message,
                     model,
@@ -87,15 +89,19 @@ class OpenAIService:
                     temperature,
                     top_p,
                 )
-                image_prompt, detected_style = self._create_image_prompt_from_request(message)
+
+                # Let the model dream the image prompt with full conversation context
+                dreamed = await self.dream_image_request(message, model, conversation_history=context)
+
                 return {
                     "response": regular_response,
                     "function_call": {
                         "name": "generate_image",
                         "arguments": {
-                            "prompt": image_prompt,
-                            "reason": "Visual illustration requested by user",
-                            "style": detected_style or "artistic",
+                            "prompt": dreamed["prompt"],
+                            "reason": dreamed.get("reason", "Visual illustration requested by user"),
+                            "style": dreamed.get("style", "artistic"),
+                            "negative_prompt": dreamed.get("negative_prompt", ""),
                         },
                     },
                     "ai_initiated": True,
@@ -247,8 +253,17 @@ class OpenAIService:
         payload["negative_prompt"] = str(payload.get("negative_prompt") or "").strip()
         return payload
 
-    async def dream_image_request(self, message: str, model: Optional[str] = None) -> Dict[str, Any]:
-        """Turn a user prompt into a ComfyUI-ready dreamed image brief."""
+    async def dream_image_request(
+        self,
+        message: str,
+        model: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
+        """Turn a user prompt into a ComfyUI-ready dreamed image brief.
+
+        When *conversation_history* is supplied the model can resolve
+        references like "do another version" or "make it darker".
+        """
         model = model or self.default_model
         messages = [
             {
@@ -259,6 +274,7 @@ class OpenAIService:
                     "Rules:\n"
                     "- prompt must be vivid, concise, and production-ready for image generation.\n"
                     "- preserve the user's intent but improve composition, lighting, medium, and atmosphere.\n"
+                    "- if the user references a previous image or asks for a revision, use the conversation history to understand what they want changed.\n"
                     "- do not add safety lectures or conversational filler.\n"
                     "- keep prompt under 900 characters.\n"
                     "- style must be one of: realistic, artistic, cartoon, sketch, digital_art, photographic, concept_art, semi_realistic.\n"
@@ -266,11 +282,20 @@ class OpenAIService:
                     "- negative_prompt should be brief and optional.\n"
                 ),
             },
-            {
-                "role": "user",
-                "content": f"Dream and prepare this for local image rendering:\n\n{message}",
-            },
         ]
+
+        # Inject recent conversation so the model can resolve "do it again but ..."
+        if conversation_history:
+            for msg in conversation_history[-8:]:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": content})
+
+        messages.append({
+            "role": "user",
+            "content": f"Dream and prepare this for local image rendering:\n\n{message}",
+        })
 
         payload = {
             "model": model,
