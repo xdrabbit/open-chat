@@ -26,6 +26,11 @@ from services.chat_orchestrator import ChatOrchestrator
 from services.draw_orchestrator import DrawOrchestrator
 from services.policy_service import PolicyService
 from services.ingest_orchestrator import IngestOrchestrator
+from services.mission_control_service import (
+    TOOL_SCHEMAS as MC_TOOL_SCHEMAS,
+    MISSION_CONTROL_SYSTEM_PROMPT,
+    dispatch_tool_call as mc_dispatch_tool_call,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -238,6 +243,43 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/mc-chat")
+async def mission_control_chat(request: ChatRequest):
+    """
+    Mission Control chat endpoint. Routes the user's message to the active
+    chat service (OpenAI or Ollama) with MC tool schemas attached, so the
+    model can log accomplishments and manage goals via tool calls.
+
+    Bypasses RAG, image generation, TTS, and conversation history — this is
+    a focused tool-using assistant, not the full open-chat pipeline.
+    """
+    try:
+        model = request.model or get_default_chat_model()
+        active_service = get_active_chat_service()
+        if not hasattr(active_service, "chat_with_tools"):
+            raise HTTPException(
+                status_code=501,
+                detail=(
+                    f"Active chat service ({type(active_service).__name__}) doesn't "
+                    "support tool calling yet. Set MODEL_PROVIDER=openai or add "
+                    "chat_with_tools to the provider's service."
+                ),
+            )
+        reply = await active_service.chat_with_tools(
+            message=request.message,
+            model=model,
+            tools=MC_TOOL_SCHEMAS,
+            tool_dispatcher=mc_dispatch_tool_call,
+            system_prompt=MISSION_CONTROL_SYSTEM_PROMPT,
+        )
+        return {"response": reply, "model": model}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("MC chat error")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/chat/dream-draw", response_model=ChatResponse)
 async def chat_dream_draw(request: ChatRequest):

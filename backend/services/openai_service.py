@@ -215,6 +215,72 @@ class OpenAIService:
         )
         return result.get("response", "Sorry, I encountered an error.")
 
+    async def chat_with_tools(
+        self,
+        message: str,
+        model: str,
+        tools: List[Dict[str, Any]],
+        tool_dispatcher,
+        system_prompt: Optional[str] = None,
+        context: Optional[List[Dict[str, Any]]] = None,
+        temperature: float = 0.3,
+        max_rounds: int = 5,
+    ) -> str:
+        """
+        Chat with multi-round tool calling. Loops until the model returns a
+        final text response (no more tool_calls) or max_rounds is hit.
+        `tool_dispatcher` is an async callable (name, args) -> dict.
+        """
+        messages: List[Dict[str, Any]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        if context:
+            messages.extend(context)
+        messages.append({"role": "user", "content": message})
+
+        for round_idx in range(max_rounds):
+            payload = {
+                "model": model,
+                "messages": messages,
+                "tools": tools,
+                "temperature": temperature,
+            }
+            response = await self.client.post(
+                f"{self.base_url}/chat/completions",
+                headers=self._headers(),
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            choice = (data.get("choices") or [{}])[0]
+            assistant_msg = choice.get("message", {}) or {}
+            tool_calls = assistant_msg.get("tool_calls") or []
+
+            messages.append(assistant_msg)
+
+            if not tool_calls:
+                return assistant_msg.get("content") or ""
+
+            for call in tool_calls:
+                fn = call.get("function", {}) or {}
+                name = fn.get("name", "")
+                raw_args = fn.get("arguments", "{}") or "{}"
+                try:
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except json.JSONDecodeError:
+                    args = {}
+                result = await tool_dispatcher(name, args)
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.get("id", ""),
+                        "content": json.dumps(result),
+                    }
+                )
+
+        logger.warning("chat_with_tools hit max_rounds=%d without final answer", max_rounds)
+        return "(tool-calling loop exceeded max rounds — partial work may have completed)"
+
     async def generate_response(self, prompt: str, model: Optional[str] = None) -> str:
         """Generate a text response from an OpenAI chat model."""
         model = model or self.default_model
