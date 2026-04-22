@@ -130,6 +130,33 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "delete_accomplishment",
+            "description": (
+                "Remove a single accomplishment from a given day. Use when Tom "
+                "asks to delete, remove, or undo a logged task. The task is "
+                "matched by case-insensitive substring on task text — be "
+                "specific enough that only one match exists or the API will "
+                "refuse and return the candidates."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD (local) of the day to delete from",
+                    },
+                    "task_contains": {
+                        "type": "string",
+                        "description": "Substring of the task to match (be specific)",
+                    },
+                },
+                "required": ["date", "task_contains"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "set_day_summary",
             "description": (
                 "Set or replace the narrative summary for a day (any date). Use when "
@@ -320,6 +347,27 @@ async def _get_current_goals(_: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _delete_accomplishment(args: Dict[str, Any]) -> Dict[str, Any]:
+    date = args.get("date", "").strip()
+    task_contains = args.get("task_contains", "").strip()
+    if not date or not task_contains:
+        return {"ok": False, "error": "date and task_contains are required"}
+
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.request(
+            "DELETE",
+            f"{MC_API_BASE}/accomplishments",
+            json={"date": date, "task_contains": task_contains},
+        )
+        if resp.status_code == 409:
+            # Multiple matches — pass candidates back so the LLM can ask Tom to narrow.
+            body = resp.json()
+            return {"ok": False, "error": body.get("error"), "candidates": body.get("candidates", [])}
+        if resp.is_error:
+            return {"ok": False, "error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+        return resp.json()
+
+
 async def _set_day_summary(args: Dict[str, Any]) -> Dict[str, Any]:
     date = args.get("date", "").strip()
     summary = args.get("summary", "").strip()
@@ -405,6 +453,7 @@ HANDLERS: Dict[str, Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = {
     "get_todays_progress": _get_todays_progress,
     "get_current_goals": _get_current_goals,
     "set_day_summary": _set_day_summary,
+    "delete_accomplishment": _delete_accomplishment,
     "log_meal": _log_meal,
     "plan_meals": _plan_meals,
     "get_todays_meals": _get_todays_meals,
@@ -413,6 +462,7 @@ HANDLERS: Dict[str, Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = {
 
 async def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """Invoke the named tool and return its result dict."""
+    logger.info("MC tool call: %s args=%s", name, arguments)
     handler = HANDLERS.get(name)
     if not handler:
         return {"ok": False, "error": f"unknown tool: {name}"}
@@ -426,7 +476,32 @@ async def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, 
         return {"ok": False, "error": f"unexpected error: {e}"}
 
 
-MISSION_CONTROL_SYSTEM_PROMPT = """You are Tom's Personal Mission Control assistant.
+def build_system_prompt() -> str:
+    """Return the MC system prompt with TODAY'S ACTUAL DATE injected.
+
+    LLMs don't know the real current date — without this, 'today' resolves
+    to some date from the training distribution and tool calls land on
+    the wrong day.
+    """
+    from datetime import datetime as _dt
+    today = _dt.now()
+    iso = today.strftime("%Y-%m-%d")
+    yesterday = today.replace(day=today.day)  # placeholder; below overrides
+    # Compute yesterday safely across month boundaries
+    from datetime import timedelta as _td
+    yesterday_iso = (today - _td(days=1)).strftime("%Y-%m-%d")
+    weekday = today.strftime("%A")
+    return MISSION_CONTROL_SYSTEM_PROMPT_TEMPLATE.format(
+        today=iso, yesterday=yesterday_iso, weekday=weekday
+    )
+
+
+MISSION_CONTROL_SYSTEM_PROMPT_TEMPLATE = """You are Tom's Personal Mission Control assistant.
+
+CURRENT DATE CONTEXT (use these exact values for any date-valued tool arguments):
+- Today is {weekday}, {today}
+- Yesterday was {yesterday}
+- Always pass dates in YYYY-MM-DD format. Do NOT invent dates from memory — use the values above.
 
 Your role: help him track daily accomplishments, manage monthly and weekly goals, plan and log meals, and stay oriented on what he's actually working on.
 
@@ -439,6 +514,7 @@ Goals & accomplishments:
 - get_todays_progress: read what's already been logged today
 - get_current_goals: read the active monthly and weekly goals
 - set_day_summary: set/replace the narrative summary for a given date (not a new accomplishment — the day's overall description)
+- delete_accomplishment: remove a logged task from a day. Confirm with Tom before calling if there's any ambiguity.
 
 Meals (separate from accomplishments — don't confuse the two):
 - log_meal: record what Tom ACTUALLY ATE for a slot (breakfast/lunch/dinner/snack)

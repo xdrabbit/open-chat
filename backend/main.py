@@ -28,7 +28,7 @@ from services.policy_service import PolicyService
 from services.ingest_orchestrator import IngestOrchestrator
 from services.mission_control_service import (
     TOOL_SCHEMAS as MC_TOOL_SCHEMAS,
-    MISSION_CONTROL_SYSTEM_PROMPT,
+    build_system_prompt as build_mc_system_prompt,
     dispatch_tool_call as mc_dispatch_tool_call,
 )
 
@@ -284,7 +284,7 @@ async def mission_control_chat(request: ChatRequest):
             model=model,
             tools=MC_TOOL_SCHEMAS,
             tool_dispatcher=mc_dispatch_tool_call,
-            system_prompt=MISSION_CONTROL_SYSTEM_PROMPT,
+            system_prompt=build_mc_system_prompt(),
         )
 
         try:
