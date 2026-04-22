@@ -251,8 +251,9 @@ async def mission_control_chat(request: ChatRequest):
     chat service (OpenAI or Ollama) with MC tool schemas attached, so the
     model can log accomplishments and manage goals via tool calls.
 
-    Bypasses RAG, image generation, TTS, and conversation history — this is
-    a focused tool-using assistant, not the full open-chat pipeline.
+    Bypasses RAG, image generation, and TTS — but DOES persist the exchange
+    to conversation_service with metadata.source="mc-chat" so the chat is
+    searchable later alongside regular open-chat conversations.
     """
     try:
         model = request.model or get_default_chat_model()
@@ -266,6 +267,18 @@ async def mission_control_chat(request: ChatRequest):
                     "chat_with_tools to the provider's service."
                 ),
             )
+
+        # Persist user message before calling the model so we don't lose it on error.
+        try:
+            await conversation_service.save_message(ChatMessage(
+                role="user",
+                content=request.message,
+                timestamp=datetime.now(),
+                metadata={"source": "mc-chat", "model": model},
+            ))
+        except Exception:
+            logger.warning("failed to persist mc-chat user message; continuing")
+
         reply = await active_service.chat_with_tools(
             message=request.message,
             model=model,
@@ -273,6 +286,17 @@ async def mission_control_chat(request: ChatRequest):
             tool_dispatcher=mc_dispatch_tool_call,
             system_prompt=MISSION_CONTROL_SYSTEM_PROMPT,
         )
+
+        try:
+            await conversation_service.save_message(ChatMessage(
+                role="assistant",
+                content=reply,
+                timestamp=datetime.now(),
+                metadata={"source": "mc-chat", "model": model},
+            ))
+        except Exception:
+            logger.warning("failed to persist mc-chat assistant message; continuing")
+
         return {"response": reply, "model": model}
     except HTTPException:
         raise

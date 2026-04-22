@@ -130,6 +130,30 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "set_day_summary",
+            "description": (
+                "Set or replace the narrative summary for a day (any date). Use when "
+                "Tom asks to update yesterday's summary, or to attach a summary to "
+                "today, or to correct/replace a placeholder summary. This is NOT the "
+                "same as logging a new accomplishment — it's a free-text description "
+                "of what that day amounted to."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD (local). Required. Use yesterday's date if Tom says 'yesterday'.",
+                    },
+                    "summary": {"type": "string"},
+                },
+                "required": ["date", "summary"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "log_meal",
             "description": (
                 "Record what Tom ATE for a specific slot today (or past date). "
@@ -296,6 +320,24 @@ async def _get_current_goals(_: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _set_day_summary(args: Dict[str, Any]) -> Dict[str, Any]:
+    date = args.get("date", "").strip()
+    summary = args.get("summary", "").strip()
+    if not date:
+        return {"ok": False, "error": "date is required (YYYY-MM-DD)"}
+    if not summary:
+        return {"ok": False, "error": "summary is required"}
+
+    # The existing POST /api/accomplishments endpoint already updates the day's
+    # summary when passed in the body alongside an (empty) accomplishments list.
+    payload = {"date": date, "accomplishments": [], "summary": summary}
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.post(f"{MC_API_BASE}/accomplishments", json=payload)
+        if resp.is_error:
+            return {"ok": False, "error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+    return {"ok": True, "date": date, "summary_set": summary}
+
+
 async def _log_meal(args: Dict[str, Any]) -> Dict[str, Any]:
     slot = args.get("slot", "").strip()
     item = args.get("item", "").strip()
@@ -362,6 +404,7 @@ HANDLERS: Dict[str, Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = {
     "set_weekly_goal": _set_weekly_goal,
     "get_todays_progress": _get_todays_progress,
     "get_current_goals": _get_current_goals,
+    "set_day_summary": _set_day_summary,
     "log_meal": _log_meal,
     "plan_meals": _plan_meals,
     "get_todays_meals": _get_todays_meals,
@@ -395,6 +438,7 @@ Goals & accomplishments:
 - set_weekly_goal: set this week's focus
 - get_todays_progress: read what's already been logged today
 - get_current_goals: read the active monthly and weekly goals
+- set_day_summary: set/replace the narrative summary for a given date (not a new accomplishment — the day's overall description)
 
 Meals (separate from accomplishments — don't confuse the two):
 - log_meal: record what Tom ACTUALLY ATE for a slot (breakfast/lunch/dinner/snack)
@@ -404,6 +448,7 @@ Meals (separate from accomplishments — don't confuse the two):
 Guidance:
 - Meals are a different concept than accomplishments. When Tom describes food, use the meal tools, NOT log_accomplishment. Only log eating as an accomplishment if Tom explicitly frames it that way (e.g. "logging that I finally cooked a proper dinner" — even then ask).
 - If it's unclear whether he wants to plan or log a meal, ask one brief clarifying question: "Did you already eat that, or are you planning it?"
+- If Tom asks to "update yesterday's summary" or similar, use set_day_summary with the right date — do NOT use log_accomplishment. Accomplishments and summaries are different things.
 - Only log accomplishments Tom actually completed — not plans, not intentions.
 - When Tom describes vague progress, ask short clarifying questions before logging.
 - Accomplishment categories: dev, ops, learning, personal, work. Pick the closest fit.
